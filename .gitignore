@@ -1,0 +1,25 @@
+# --- Objetos compilados ---
+*.o
+*.obj
+*.d
+/obj/
+
+# --- Executáveis gerados ---
+/bin/
+/main
+a.out
+*.exe
+*.out
+
+# --- Configuração do editor ---
+.vscode/
+
+# --- Cache do Python ---
+__pycache__/
+*.pyc
+
+# --- Saídas geradas pelos scripts ---
+plot/instructions
+
+# --- local documentation ---
+docs/

@@ -1,0 +1,43 @@
+instructions for compiling and running:
+compiling the main (or just: make)
+objects go to obj/ and the binary to bin/main
+
+make normal        # == make ; builds bin/main (obj/*.o)
+make clean         # removes obj/ and bin/main
+
+running (writes plot/instructions/origami.plot and plot/instructions/ccw_test.plot)
+
+make run           # == ./bin/main < test_files/graph.in
+make run INPUT=other.in
+
+without make:
+
+mkdir -p bin
+g++ -std=c++23 -Iinclude src/main.cpp src/printing_functions.cpp -o bin/main
+
+running the graph plotting script
+reads plot/instructions/origami.plot, writes plot/img/origami.png
+
+make plot          # == python3 scripts/graph_plotter.py --no-show
+
+python3 scripts/graph_plotter.py
+python3 scripts/graph_plotter.py --no-show        # only save, no window
+python3 scripts/graph_plotter.py -                # read stdin instead
+python3 scripts/graph_plotter.py other.plot -o plot/img/other.png
+
+running the ccw sorting test plot
+reads plot/instructions/ccw_test.plot (order of p.local_edges for EVERY point),
+writes plot/img/ccw_test.png (single graph: color = edge, number = order index
+near that edge's origin, i.e. next to the vertex that owns the ordering)
+
+make plot-ccw      # == python3 scripts/graph_plotter.py --ccw --no-show
+
+python3 scripts/graph_plotter.py --ccw
+python3 scripts/graph_plotter.py --ccw --no-show
+python3 scripts/graph_plotter.py --ccw other_ccw.plot
+
+same plot plus the local angles (p.local_angles) in degrees, written inside each
+gap of a vertex and alternating black / red
+
+make plot-ccw-angles   # -> plot/img/ccw_test_angles.png
+python3 scripts/graph_plotter.py --ccw --angles --no-show
