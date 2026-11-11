@@ -82,7 +82,8 @@ For every point, the program
    angle from `p.local_edges[k]` to the next one, so the gaps around a point always add up to
    $2\pi$. These are exactly the angles that the Kawasaki-Justin theorem needs.
 
-The program then writes the pattern to `plot/instructions/*.plot`, and `scripts/graph_plotter.py`
+The program then writes the pattern to `plot/instructions/*.plot`, and
+`plot_generator/scripts/graph_plotter.py`
 renders it into `plot/img/*.png` (see `comp_run_instructions.txt` for the commands).
 
 The assignment is not decided yet: for now every edge gets a type by simply cycling through

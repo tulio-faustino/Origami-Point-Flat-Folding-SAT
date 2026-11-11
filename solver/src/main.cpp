@@ -1,16 +1,21 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
-#include <fstream>
-#include <string>
-#include <limits>
 #include <algorithm>   // std::ranges::sort
 #include <ranges>      // std::views::zip (C++23)
 #include <functional>  // std::less
 #include <tuple>       // std::get over zip_view's tuple
-#include <utility>     // std::make_pair
+#include <utility>     // std::make_pair / std::move
 
+#include "graph_types.hpp"
+#include "mv_solver.hpp"
 #include "printing_functions.hpp"
+
+// Everything that talks to cvc5 (Kawasaki-Justin check, Maekawa-Justin and
+// Big-Little-Big encodings, model read-back and its independent re-check) lives
+// in MVAssignmentSolver (solver/src/mv_solver.cpp). This file only reads the
+// pattern, orders the edges of every point counter-clockwise, computes the
+// local angles that the encoder needs, and calls the solver.
 
 // I need to add a colision detector, since intersecting edges create another point.
 
@@ -61,14 +66,9 @@ int main() {
 
     }
 
+    // Sorts the edges counter-clockwise and finds the angles (also counter clock-wise) for every point
     for (int i = 0; i < num_points; i++){
         ccw_sort_point_edges(points[i], edges);
-    }
-
-    // Local angles between consecutive edges of each point. Must run after
-    // ccw_sort_point_edges, since it relies on the counter-clockwise order of
-    // local_edges to know which edge comes after which.
-    for (int i = 0; i < num_points; i++){
         find_angles(points[i], edges);
     }
 
@@ -78,18 +78,43 @@ int main() {
         return 1; // Terminate with error
     }
 
+    // Hand the finished pattern over: local_edges is already sorted CCW and
+    // local_angles is already filled, which is exactly what the encoder needs.
+    // The graph is moved into the solver, and points() / edges() below give the
+    // plotting code read access to it after solve().
+    MVAssignmentSolver solver(std::move(points), std::move(edges));
+
+    // solve() is where the SMT instance is actually created and decided.
+    const bool sat = solver.solve();
+    const std::vector<char> &assignment = solver.assignment();
+
+    bool model_ok = true;
+    if (sat) {
+        std::cout << "MV assignment from the solver, re-checked independently:\n";
+        model_ok = solver.validate_assignment();
+        if (!model_ok)
+            std::cerr << "INTERNAL ERROR: the solver model violates Maekawa-Justin.\n";
+    }
+
     // Generate output file (plot/instructions/origami.plot)
-    std::cout << "got to here \n";
-    generate_plot_file(points, edges);
+    generate_plot_file(solver.points(), solver.edges());
+
+    // Same pattern, but with the MV assignment coming from the solver
+    // (plot/instructions/sort.plot). On UNSAT/UNKNOWN every edge is written
+    // as 'U' and the plotter titles the image UNSAT.
+    generate_sort_plot_file(solver.points(), solver.edges(), assignment);
 
     // Debug the CCW ordering + local angles of every point
     // (plot/instructions/ccw_test.plot)
-    test_ccw_sort(points, edges, plot_paths::kCcwTestPlot, /*with_angles=*/true);
+    test_ccw_sort(solver.points(), solver.edges(), plot_paths::kCcwTestPlot, /*with_angles=*/true);
 
-    return 0;
+    if (!sat)
+        return 2; // no MV assignment exists / the solver could not decide
+
+    return model_ok ? 0 : 3; // 3: the encoder produced a model that fails the check
 }
 
-// Sorts the edges in a point counter clockwise
+// Sorts the edges in a point counter-clockwise
 void ccw_sort_point_edges(point &p, std::vector<edge> &e){
 
     std::vector<double> base_angles;
@@ -103,7 +128,8 @@ void ccw_sort_point_edges(point &p, std::vector<edge> &e){
     // Difference between the anchor and the point (always the same)
     double pa_x = 1, pa_y = 0;
 
-    for(int i = 0; i < p.local_edges.size(); i++){
+    const int degree = static_cast<int>(p.local_edges.size());
+    for(int i = 0; i < degree; i++){
 
         // to not pick up the same point as the destination point
         double other_x, other_y;

@@ -8,16 +8,17 @@
 // ---------------------------------------------------------------------------
 // Directory layout (relative to the working directory the program runs from):
 //   plot/instructions/  <- .plot files written here by the printing functions
-//   plot/img/           <- images rendered here by scripts/graph_plotter.py
+//   plot/img/           <- images rendered here by plot_generator/scripts/graph_plotter.py
 // ---------------------------------------------------------------------------
 namespace plot_paths {
 inline constexpr const char* kInstructionsDir = "plot/instructions";
 inline constexpr const char* kOrigamiPlot    = "plot/instructions/origami.plot";
 inline constexpr const char* kCcwTestPlot    = "plot/instructions/ccw_test.plot";
+inline constexpr const char* kSortPlot       = "plot/instructions/sort.plot";
 } // namespace plot_paths
 
 // Writes the whole crease pattern (points + typed edges) to `filename`, in the
-// format consumed by scripts/graph_plotter.py.
+// format consumed by plot_generator/scripts/graph_plotter.py.
 // Missing parent directories are created automatically.
 // Aborts (with a message on stderr) if the pattern has fewer than 4 points,
 // because the plot boundaries are undefined in that case.
@@ -29,11 +30,36 @@ void generate_plot_file(const std::string& filename,
 void generate_plot_file(const std::vector<point>& points,
                         const std::vector<edge>& edges);
 
+// Same layout as generate_plot_file, but the edge type column comes from the
+// MV assignment returned by solve_mv_assignment() instead of edge::type:
+//
+//   <num_points>
+//   <x> <y>                  (per point)
+//   <num_edges>
+//   <p1> <p2> <'0'|'M'|'V'|'U'>
+//
+// solve_mv_assignment() answers UNSAT/UNKNOWN with a single-element vector
+// {'U'}. In that case there is no per-edge assignment, but the file is still
+// written (it shows the pattern that could not be folded) with 'U' on EVERY
+// edge. An empty assignment is treated the same way.
+//
+// The 'U' edges are drawn in purple by plot_generator/scripts/graph_plotter.py,
+// which titles the resulting image UNSAT.
+void generate_sort_plot_file(const std::string& filename,
+                             const std::vector<point>& points,
+                             const std::vector<edge>& edges,
+                             const std::vector<char>& assignment);
+
+// Same as above, writing to plot_paths::kSortPlot.
+void generate_sort_plot_file(const std::vector<point>& points,
+                             const std::vector<edge>& edges,
+                             const std::vector<char>& assignment);
+
 // Debug helper for ccw_sort_point_edges:
 // writes, for EVERY point of the pattern, its p.local_edges vector *in the
 // current order*, one block per point.
 //
-// Implemented in src/printing_functions.cpp.
+// Implemented in plot_generator/src/printing_functions.cpp.
 //
 // Output format (whitespace separated, '//' starts a comment):
 //
@@ -48,9 +74,11 @@ void generate_plot_file(const std::vector<point>& points,
 // If the sort worked, <angle> must be non-decreasing inside each block.
 //
 // The extra line carries p.local_angles in RADIANS (the gaps between
-// consecutive edges); scripts/graph_plotter.py converts them to degrees.
+// consecutive edges); plot_generator/scripts/graph_plotter.py converts them to
+// degrees.
 //
-// The resulting file is plotted by plot_ccw_sequence() in scripts/graph_plotter.py.
+// The resulting file is plotted by plot_ccw_sequence() in
+// plot_generator/scripts/graph_plotter.py.
 void test_ccw_sort(const std::vector<point>& points,
                    const std::vector<edge>& edges,
                    const std::string& filename = plot_paths::kCcwTestPlot,

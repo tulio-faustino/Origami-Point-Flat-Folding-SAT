@@ -5,11 +5,20 @@
 
 // ---------------------------------------------------------------------------
 // Shared data model of the crease pattern.
-// Kept in its own header so that both src/main.cpp and the printing helpers in
-// src/printing_functions.cpp can talk about the same point/edge types.
+// Kept in its own header so that the reader/geometry code in solver/src/main.cpp,
+// the SMT encoder in solver/src/mv_solver.cpp and the printing helpers in
+// plot_generator/src/printing_functions.cpp all talk about the same
+// point/edge types.
 // ---------------------------------------------------------------------------
 
 constexpr double PI = 3.141592653589793;
+
+// The input format has no boundary flag: the corners of the paper are assumed
+// to be the first points of the file (ids 0 .. kDefaultCorners - 1). The
+// default paper is a square (4 corners); a closed crease pattern needs at
+// least a triangle (3).
+inline constexpr int kDefaultCorners = 4;
+inline constexpr int kMinCorners = 3;
 
 struct point {
     int id;

@@ -7,11 +7,27 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Arc
 
 # ---------------------------------------------------------------------------
-# Directory layout, resolved from the repository root (parent of scripts/):
+# Directory layout, resolved from the repository root:
 #   plot/instructions/  <- .plot files written by the C++ printing functions
 #   plot/img/           <- images rendered by this script
+#
+# The script may live directly in <root>/scripts/ or nested one level deeper
+# (e.g. <root>/plot_generator/scripts/), so the root is not hard-coded: walk up
+# from here until a directory holding both plot/ and the Makefile is found.
 # ---------------------------------------------------------------------------
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+def _find_root(start):
+    current = start
+    while True:
+        if (os.path.isdir(os.path.join(current, 'plot'))
+                and os.path.isfile(os.path.join(current, 'Makefile'))):
+            return current
+        parent = os.path.dirname(current)
+        if parent == current:  # filesystem root reached
+            return start
+        current = parent
+
+
+ROOT_DIR = _find_root(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 INSTRUCTIONS_DIR = os.path.join(ROOT_DIR, 'plot', 'instructions')
 IMG_DIR = os.path.join(ROOT_DIR, 'plot', 'img')
 
@@ -57,12 +73,17 @@ def _clean_lines(stream):
 def main(path=None, out_path=None, show=True, use_stdin=False):
     """Plot the crease pattern read from `path` (default: plot/instructions/origami.plot).
 
-    With use_stdin=True (or when the default instruction file is missing) the
-    pattern is read from standard input instead.
+    With use_stdin=True the pattern is read from standard input instead.
     """
     source = path
     if source is None and not use_stdin and os.path.exists(ORIGAMI_INSTRUCTIONS):
         source = ORIGAMI_INSTRUCTIONS
+
+    if source is None and not use_stdin:
+        # Never fall back to stdin implicitly: an unattended run (e.g. `make
+        # plot`) would block forever waiting for input that never comes.
+        sys.exit(f"Error: instruction file '{ORIGAMI_INSTRUCTIONS}' not found. "
+                 "Run the solver first (make run) or pass '-' to read stdin.")
 
     if source is None:
         # Read and clean input from standard input (stdin)
@@ -110,10 +131,17 @@ def main(path=None, out_path=None, show=True, use_stdin=False):
             c, ls, lw = 'red', 'solid', 1.5
         elif t == 'V':
             c, ls, lw = 'darkblue', 'dashed', 1.5
+        elif t == 'U':
+            # 'U' = no usable assignment (UNSAT / UNKNOWN) for this edge
+            c, ls, lw = 'purple', 'solid', 1.5
         else:
             c, ls, lw = 'gray', 'dotted', 1.0  # Fallback for unrecognized types
 
         ax.plot(x_coords, y_coords, color=c, linestyle=ls, linewidth=lw)
+
+    # solve_mv_assignment() writes 'U' on EVERY edge when the instance has no
+    # valid assignment, so the first edge alone identifies the UNSAT case.
+    unsat = bool(edges) and edges[0][2] == 'U'
 
     # Set boundaries based on the first 4 points
     if len(points) >= 4:
@@ -134,7 +162,12 @@ def main(path=None, out_path=None, show=True, use_stdin=False):
     ax.set_aspect('equal', adjustable='box')
 
     ax.grid(True, linestyle=':', alpha=0.6)
-    ax.set_title("Graph Visualization")
+    if unsat:
+        ax.set_title("UNSAT - no flat-foldable MV assignment exists",
+                     color='red')
+        print("UNSAT: every edge is marked 'U' (drawn in purple).")
+    else:
+        ax.set_title("Graph Visualization")
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
 

@@ -1,43 +1,55 @@
 instructions for compiling and running:
 compiling the main (or just: make)
-objects go to obj/ and the binary to bin/main
+objects go to obj/ (mirroring the source tree) and the binary to bin/main
 
-make normal        # == make ; builds bin/main (obj/*.o)
+make normal        # == make ; builds bin/main (obj/**/*.o)
 make clean         # removes obj/ and bin/main
 
-running (writes plot/instructions/origami.plot and plot/instructions/ccw_test.plot)
+running (writes plot/instructions/origami.plot, plot/instructions/sort.plot and
+plot/instructions/ccw_test.plot)
 
 make run           # == ./bin/main < test_files/graph.in
 make run INPUT=other.in
 
+sort.plot holds the same pattern as origami.plot, but the edge type column is
+the MV assignment returned by the solver ('M' / 'V'). When the instance has no
+usable assignment (UNSAT / UNKNOWN) the file is written with 'U' on every edge.
+
+python3 plot_generator/scripts/graph_plotter.py plot/instructions/sort.plot --no-show
+# -> plot/img/sort.png; 'U' edges are purple and the title says UNSAT
+
 without make:
 
 mkdir -p bin
-g++ -std=c++23 -Iinclude src/main.cpp src/printing_functions.cpp -o bin/main
+g++ -std=c++23 -Isolver/include -Iplot_generator/include \
+    -I$HOME/.local/opt/cvc5-1.4.2/include \
+    solver/src/main.cpp solver/src/mv_solver.cpp \
+    plot_generator/src/printing_functions.cpp -o bin/main \
+    -L$HOME/.local/opt/cvc5-1.4.2/lib -lcvc5 -Wl,-rpath,$HOME/.local/opt/cvc5-1.4.2/lib
 
 running the graph plotting script
 reads plot/instructions/origami.plot, writes plot/img/origami.png
 
-make plot          # == python3 scripts/graph_plotter.py --no-show
+make plot          # == python3 plot_generator/scripts/graph_plotter.py --no-show
 
-python3 scripts/graph_plotter.py
-python3 scripts/graph_plotter.py --no-show        # only save, no window
-python3 scripts/graph_plotter.py -                # read stdin instead
-python3 scripts/graph_plotter.py other.plot -o plot/img/other.png
+python3 plot_generator/scripts/graph_plotter.py
+python3 plot_generator/scripts/graph_plotter.py --no-show        # only save, no window
+python3 plot_generator/scripts/graph_plotter.py -                # read stdin instead
+python3 plot_generator/scripts/graph_plotter.py other.plot -o plot/img/other.png
 
 running the ccw sorting test plot
 reads plot/instructions/ccw_test.plot (order of p.local_edges for EVERY point),
 writes plot/img/ccw_test.png (single graph: color = edge, number = order index
 near that edge's origin, i.e. next to the vertex that owns the ordering)
 
-make plot-ccw      # == python3 scripts/graph_plotter.py --ccw --no-show
+make plot-ccw      # == python3 plot_generator/scripts/graph_plotter.py --ccw --no-show
 
-python3 scripts/graph_plotter.py --ccw
-python3 scripts/graph_plotter.py --ccw --no-show
-python3 scripts/graph_plotter.py --ccw other_ccw.plot
+python3 plot_generator/scripts/graph_plotter.py --ccw
+python3 plot_generator/scripts/graph_plotter.py --ccw --no-show
+python3 plot_generator/scripts/graph_plotter.py --ccw other_ccw.plot
 
 same plot plus the local angles (p.local_angles) in degrees, written inside each
 gap of a vertex and alternating black / red
 
 make plot-ccw-angles   # -> plot/img/ccw_test_angles.png
-python3 scripts/graph_plotter.py --ccw --angles --no-show
+python3 plot_generator/scripts/graph_plotter.py --ccw --angles --no-show

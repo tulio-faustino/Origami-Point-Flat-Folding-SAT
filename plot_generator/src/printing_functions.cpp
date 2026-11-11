@@ -34,6 +34,53 @@ std::pair<double, double> neighbor_position(const point& p, const edge& e) {
     return {other.pos_x, other.pos_y};
 }
 
+// Writes the crease pattern with an explicit type per edge, index-aligned with
+// `edges`. Shared body of generate_plot_file() (types taken from edge::type)
+// and generate_sort_plot_file() (types taken from the solver assignment).
+bool write_plot_file(const std::string& filename,
+                     const std::vector<point>& points,
+                     const std::vector<edge>& edges,
+                     const std::vector<char>& types) {
+    // Boundary verification check
+    if (points.size() < 4) {
+        std::cerr << "Export error: The graph contains only " << points.size()
+                  << " point(s). At least 4 points are required to define the plot boundaries.\n";
+        return false; // Abort file export
+    }
+
+    if (types.size() != edges.size()) {
+        std::cerr << "Export error: " << types.size() << " type(s) for "
+                  << edges.size() << " edge(s).\n";
+        return false;
+    }
+
+    if (!ensure_parent_dir(filename)) {
+        return false;
+    }
+
+    std::ofstream out(filename);
+    if (!out.is_open()) {
+        std::cerr << "Error: Failed to create file " << filename << ".\n";
+        return false;
+    }
+
+    // Write points
+    out << points.size() << " //number points\n";
+    for (const auto& p : points) {
+        out << p.pos_x << " " << p.pos_y << "\n";
+    }
+
+    // Write edges with their type ('0', 'M', 'V' or 'U')
+    out << edges.size() << " //number edges\n";
+    for (std::size_t i = 0; i < edges.size(); ++i) {
+        out << edges[i].p1.id << " " << edges[i].p2.id << " " << types[i] << "\n";
+    }
+
+    out.close();
+    std::cout << "Plot file '" << filename << "' successfully generated!\n";
+    return true;
+}
+
 // Same angle definition used by ccw_sort_point_edges(): sweep measured CCW
 // from the +x axis, normalized to [0, 2*pi).
 double ccw_angle(const point& p, double nx, double ny) {
@@ -61,43 +108,52 @@ double ccw_angle(const point& p, double nx, double ny) {
 
 
 void generate_plot_file(const std::string& filename, const std::vector<point>& points, const std::vector<edge>& edges) {
-    // Boundary verification check
-    if (points.size() < 4) {
-        std::cerr << "Export error: The graph contains only " << points.size()
-                  << " point(s). At least 4 points are required to define the plot boundaries.\n";
-        return; // Abort file export
-    }
-
-    if (!ensure_parent_dir(filename)) {
-        return;
-    }
-
-    std::ofstream out(filename);
-    if (!out.is_open()) {
-        std::cerr << "Error: Failed to create file " << filename << ".\n";
-        return;
-    }
-
-    // Write points
-    out << points.size() << " //number points\n";
-    for (const auto& p : points) {
-        out << p.pos_x << " " << p.pos_y << "\n";
-    }
-
-    // Write edges
-    out << edges.size() << " //number edges\n";
+    std::vector<char> types;
+    types.reserve(edges.size());
     for (const auto& e : edges) {
-        // Output origin, destination, and edge type ('0', 'M', or 'V')
-        out << e.p1.id << " " << e.p2.id << " " << e.type << "\n";
+        types.push_back(e.type);
     }
 
-    out.close();
-    std::cout << "Plot file '" << filename << "' successfully generated!\n";
+    write_plot_file(filename, points, edges, types);
 }
 
 
 void generate_plot_file(const std::vector<point>& points, const std::vector<edge>& edges) {
     generate_plot_file(plot_paths::kOrigamiPlot, points, edges);
+}
+
+
+void generate_sort_plot_file(const std::string& filename,
+                             const std::vector<point>& points,
+                             const std::vector<edge>& edges,
+                             const std::vector<char>& assignment) {
+    // solve_mv_assignment() reports UNSAT/UNKNOWN as a single-element {'U'}:
+    // there is no per-edge assignment then, but the plot is still useful (it
+    // shows the pattern that failed), so every edge is marked 'U'.
+    const bool unsat = assignment.empty() || assignment.front() == 'U';
+
+    std::vector<char> types;
+    if (unsat) {
+        std::cout << "Sort plot: no MV assignment (UNSAT/UNKNOWN), "
+                     "marking every edge as 'U'.\n";
+        types.assign(edges.size(), 'U');
+    } else {
+        if (assignment.size() != edges.size()) {
+            std::cerr << "Sort plot error: got " << assignment.size()
+                      << " assignment(s) for " << edges.size() << " edge(s).\n";
+            return;
+        }
+        types = assignment; // already 'M' / 'V' per edge
+    }
+
+    write_plot_file(filename, points, edges, types);
+}
+
+
+void generate_sort_plot_file(const std::vector<point>& points,
+                             const std::vector<edge>& edges,
+                             const std::vector<char>& assignment) {
+    generate_sort_plot_file(plot_paths::kSortPlot, points, edges, assignment);
 }
 
 

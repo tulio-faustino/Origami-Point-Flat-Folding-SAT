@@ -1,4 +1,4 @@
-# --- Objetos compilados ---
+# --- Objetos compilados (obj/ espelha solver/ e plot_generator/) ---
 *.o
 *.obj
 *.d
@@ -11,14 +11,15 @@ a.out
 *.exe
 *.out
 
-# --- Configuração do editor ---
+# --- Configuração local do editor e dos agentes ---
 .vscode/
+.github/
 
-# --- Cache do Python ---
+# --- Cache do Python (plot_generator/scripts/) ---
 __pycache__/
 *.pyc
 
-# --- Saídas geradas pelos scripts ---
+# --- Saídas geradas pelos scripts (plot_generator/scripts/graph_plotter.py) ---
 plot/instructions
 
 # --- local documentation ---
