@@ -23,7 +23,7 @@ The three verifying basis for deciding the foldability of a point are the follow
 2. In a given point P, for every edge that goes through it, being V the set of valley fold edges and M the set of mountain fold edges, we have that:
    $$||V| - |M|| = 2$$
 3. For every trio of edges, being $\alpha_{i}$ the angle for the edge $e_{i}$ to $\mathcal{c}_{i+1}$, we have:
-   $$((e_{i-1} = e_{i+1}) \wedge ((\alpha_{i} < \alpha_{i-1}) \wedge (\alpha_{i} < \alpha_{i+1}))) \rightarrow (e_{i} = \neg e_{i-1})$$
+   $$((e_{i-1} = e_{i+1}) \wedge ((\alpha_{i} < \alpha_{i-1}) \wedge (\alpha_{i} < \alpha_{i+1}))) \rightarrow (e_{i} = \neg e_{i+1})$$
 
 That is, if the angle between $e_{i}$ and the next edge is smaller than the angle from the last edge to $e_{i}$ and smaller than the angle from the next edge to its next edge, the fold must be the contrary to both of those edges.
 
