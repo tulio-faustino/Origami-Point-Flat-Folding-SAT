@@ -129,8 +129,10 @@ bool MVAssignmentSolver::validate_assignment() const
             (assignment_[id] == 'M' ? mountains : valleys)++;
         }
 
-        const bool is_corner = pt.id < num_corners_;
-        const bool is_boundary = is_corner || (deg % 2 != 0);
+        // Boundary-ness comes from the per-point flag (corners plus the points
+        // created by extend_edges); an ODD degree is still a geometric hint of
+        // a boundary vertex, because an interior vertex always has even degree.
+        const bool is_boundary = graph_.is_boundary_point(pt.id) || (deg % 2 != 0);
         if (is_boundary && deg % 2 == 0)
             continue; // skipped by the encoding as well
 
@@ -212,11 +214,11 @@ void MVAssignmentSolver::assert_maekawa(cvc5::Solver& solver,
     if (deg == 0)
         return;
 
-    // Corners are the first points of the input, so this is an id range test.
-    // An ODD degree also means boundary: an interior vertex of a flat-foldable
-    // pattern always has an even number of creases.
-    const bool is_corner = pt.id < num_corners_;
-    const bool is_boundary = is_corner || (deg % 2 != 0);
+    // The graph carries the boundary information per point (corners, plus the
+    // points created by extend_edges). An ODD degree also means boundary: an
+    // interior vertex of a flat-foldable pattern always has an even degree.
+    const bool on_paper_boundary = graph_.is_boundary_point(pt.id);
+    const bool is_boundary = on_paper_boundary || (deg % 2 != 0);
 
     // A boundary vertex with even degree would need the paper's own angle at
     // that point, which the graph does not carry, so there is nothing sound to

@@ -61,8 +61,11 @@ private:
     //
     // Vertices on the paper boundary follow the ODD version ||M| - |V|| = 1
     // (=> |M| = (d - 1) / 2 or (d + 1) / 2) instead. The boundary is taken from
-    // num_corners_ plus the odd-degree rule (an interior vertex of a
-    // flat-foldable pattern always has an even number of creases).
+    // origamiGraph::point_is_normal (corners and the points created by
+    // extend_edges), plus the odd-degree rule (an interior vertex of a
+    // flat-foldable pattern always has an even number of creases). Boundary
+    // vertices of even degree are skipped: their paper angle is not in the
+    // graph, so there is nothing sound to assert.
     // -----------------------------------------------------------------------
     void assert_maekawa(cvc5::Solver& solver, cvc5::TermManager& tm,
                         const std::vector<cvc5::Term>& x,
@@ -101,9 +104,10 @@ public:
     // caller's pattern stays intact and solve() can be repeated.
     //
     // num_corners: the first num_corners points of the graph (ids
-    // 0 .. num_corners - 1) are the corners of the paper. The count comes from
-    // the first line of the input file and the positional convention above is
-    // the only boundary information available (see assert_maekawa).
+    // 0 .. num_corners - 1) are the corners of the paper. This positional
+    // convention is the fallback when the graph carries no per-point boundary
+    // flags; with flags present, is_boundary_point() (corners plus the points
+    // created by extend_edges) is the authoritative source (see assert_maekawa).
     explicit MVAssignmentSolver(const origamiGraph& graph);
 
     // Builds the cvc5 instance and decides it.

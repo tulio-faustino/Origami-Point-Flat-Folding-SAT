@@ -1,4 +1,5 @@
-#include <cmath>      // std::abs, used by the corner checks
+#include <algorithm>  // std::count, std::max, std::min
+#include <cmath>      // std::abs, std::hypot, used by the geometry
 #include <cstdlib>    // std::system, to run the plotting script
 #include <filesystem> // std::filesystem::path, to place the instruction files
 #include <fstream>    // std::ifstream, to read the .in files from the disk
@@ -22,7 +23,7 @@
 //   create <name> <n_corners>  create an EMPTY graph with n_corners corners
 //   mv_solve <name>            solve the MV assignment, keep it in
 //                              graph.sort_assignment (no file is written)
-//   extend <src> [dst]         (stub) extend the edges of <src>
+//   extend <src> [dst]         extend every edge of <src> to the paper border
 //   intersections <src> [dst]  (stub) split the intersecting edges of <src>
 //   print <type> [grafo] [file] write + render the instructions of a graph
 //   graphs | list              list the graphs loaded so far
@@ -132,8 +133,15 @@ bool load_graph(std::istream& in, origamiGraph& graph, std::string& error);
 // Returns 0 SAT, 2 UNSAT / UNKNOWN, 3 the model failed the re-check.
 int run_solve(origamiGraph& graph);
 
-// Stubs for the geometry that is not implemented yet. `original` is read-only
-// and `new_graph` receives the generated points/edges.
+// Geometry steps. `original` is read-only and `new_graph` receives the
+// generated points/edges.
+//
+// extend_edges(): copies the pattern and, for every edge endpoint that does not
+// already lie on the paper border, casts a ray along the edge's own line until
+// it hits the outline. The hit becomes a new boundary point (snapped to an
+// existing point when within tolerance) and a stub edge, with the same type as
+// the edge it extends, is added. Collisions with the other creases are NOT
+// handled here (that is what intersections() will be for).
 void make_intersections(const origamiGraph& original, origamiGraph& new_graph);
 void extend_edges(const origamiGraph& original, origamiGraph& new_graph);
 
@@ -327,7 +335,7 @@ void print_commands() {
         << "  insert <name> <file.in>    read a crease pattern into a named graph\n"
         << "  create <name> <n_corners>  create an empty graph with n_corners corners\n"
         << "  mv_solve <name>            solve the MV assignment (kept in graph.sort_assignment)\n"
-        << "  extend <src> [dst]         (not implemented) extend the edges of <src>\n"
+        << "  extend <src> [dst]         extend every edge of <src> to the paper border\n"
         << "  intersections <src> [dst]  (not implemented) split the intersecting edges of <src>\n"
         << "  print <type> [graph] [file]  write + render the instructions (print --help)\n"
         << "  graphs | list              list the graphs loaded so far\n"
@@ -433,17 +441,33 @@ void command_extend(const std::vector<std::string>& tokens, bool intersections) 
         return;
     }
 
-    // Skeleton: the geometry is still a stub, so the generated graph stays empty
-    // and is NOT registered. Once the stubs are implemented this is the only
-    // line that has to change (push {destination, std::move(generated)}).
     origamiGraph generated;
     if (intersections)
         make_intersections(source->graph, generated);
     else
         extend_edges(source->graph, generated);
 
-    std::cout << "note: '" << command << "' is not implemented yet; graph '"
-              << destination << "' was not created.\n";
+    if (intersections) {
+        std::cout << "note: '" << command << "' is not implemented yet; graph '"
+                  << destination << "' was not created.\n";
+        return;
+    }
+
+    if (generated.points.empty()) {
+        std::cerr << "Error: '" << command << "' produced no graph; '"
+                  << destination << "' was not created.\n";
+        return;
+    }
+
+    const auto boundary_points =
+        std::count(generated.point_is_normal.begin(), generated.point_is_normal.end(), 0);
+
+    std::cout << "Graph '" << destination << "': " << generated.points.size()
+              << " points (" << boundary_points << " on the paper boundary), "
+              << generated.edges.size() << " edges.\n";
+
+    graphs.push_back({destination, std::move(generated)});
+    current_graph = destination;
 }
 
 int command_print(const std::vector<std::string>& tokens) {
@@ -633,10 +657,6 @@ int print_graph(NamedGraph& entry, PrintType type, const std::string& filename) 
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Solving (same pipeline as the old run_solve, minus the file writing)
-// ---------------------------------------------------------------------------
-
 int run_solve(origamiGraph& graph) {
     // Hand the finished pattern over: local_edges is already sorted CCW and
     // local_angles is already filled, which is exactly what the encoder needs.
@@ -662,11 +682,6 @@ int run_solve(origamiGraph& graph) {
 
     return model_ok ? 0 : 3; // 3: the encoder produced a model that fails the check
 }
-
-// ---------------------------------------------------------------------------
-// Input (same parsing as the old main, but from an arbitrary stream and into a
-// graph that is returned to the caller only when everything is valid)
-// ---------------------------------------------------------------------------
 
 bool load_graph(std::istream& in, origamiGraph& graph, std::string& error) {
     // The first line is "num_corners num_points": the number of corners comes
@@ -712,6 +727,11 @@ bool load_graph(std::istream& in, origamiGraph& graph, std::string& error) {
         }
         graph.points.emplace_back(x, y, i); // ID synchronized with the index i
     }
+
+    // Boundary flags: the corners are the only boundary points the input
+    // declares, everything else is normal. extend_edges() marks the additional
+    // points it creates on the border (and any input point sitting on it).
+    graph.refresh_boundary_flags();
 
     // Only the corners are checked for the counter-clockwise order; whatever
     // order the remaining (interior) points arrive in is irrelevant.
@@ -770,8 +790,154 @@ bool load_graph(std::istream& in, origamiGraph& graph, std::string& error) {
 }
 
 // ---------------------------------------------------------------------------
-// Geometry not implemented yet
+// Geometry: edge extension to the paper border
 // ---------------------------------------------------------------------------
+
+namespace {
+
+// A hit of a ray against the paper outline. `t` is a distance because the ray
+// direction is always a unit vector.
+struct ray_hit {
+    bool found = false;
+    double t = 0.0;
+    double x = 0.0;
+    double y = 0.0;
+};
+
+// Intersection of the ray (ox, oy) + t*(dx, dy), t > 0, with the segment `s`.
+// The direction is a unit vector, so `t` is a distance. Collinear overlaps are
+// reported at the segment endpoint closest to the ray origin.
+bool ray_segment_hit(double ox, double oy, double dx, double dy,
+                     const boundary_segment& s, double& t) {
+    const double sx = s.x2 - s.x1;
+    const double sy = s.y2 - s.y1;
+    const double seg_len = std::hypot(sx, sy);
+    if (seg_len <= 0.0)
+        return false; // degenerate outline segment
+
+    const double qx = s.x1 - ox;
+    const double qy = s.y1 - oy;
+
+    const double denom = dx * sy - dy * sx;
+    const double parallel_eps = 1e-12 * seg_len;
+
+    if (std::abs(denom) > parallel_eps) {
+        const double t_ray = (qx * sy - qy * sx) / denom;
+        const double u_seg = (qx * dy - qy * dx) / denom;
+        if (t_ray <= 0.0 || u_seg < -1e-12 || u_seg > 1.0 + 1e-12)
+            return false;
+        t = t_ray;
+        return true;
+    }
+
+    // Parallel: only a collinear ray can reach the segment.
+    if (std::abs(qx * dy - qy * dx) > 1e-12 * seg_len)
+        return false;
+
+    const double t1 = qx * dx + qy * dy; // (s1 - origin) . direction
+    const double t2 = (s.x2 - ox) * dx + (s.y2 - oy) * dy;
+    const double lo = std::min(t1, t2);
+    const double hi = std::max(t1, t2);
+    if (hi <= 0.0)
+        return false;
+
+    t = lo > 0.0 ? lo : hi;
+    return t > 0.0;
+}
+
+// First (closest) hit of the ray with the closed paper outline, ignoring hits
+// at a distance <= min_t (the ray origin may be a hair from the border).
+bool first_boundary_hit(double ox, double oy, double dx, double dy,
+                        const std::vector<boundary_segment>& segments,
+                        double min_t, ray_hit& hit) {
+    hit = ray_hit{};
+
+    for (const boundary_segment& s : segments) {
+        double t = 0.0;
+        if (!ray_segment_hit(ox, oy, dx, dy, s, t) || t <= min_t)
+            continue;
+
+        if (!hit.found || t < hit.t) {
+            hit.found = true;
+            hit.t = t;
+            hit.x = ox + t * dx;
+            hit.y = oy + t * dy;
+        }
+    }
+
+    return hit.found;
+}
+
+// Reuses the point at (x, y) when it is within snap_eps; otherwise appends a
+// new point. Any point created here lives on the paper border.
+int find_or_add_point(origamiGraph& graph, double x, double y, double snap_eps) {
+    const double snap2 = snap_eps * snap_eps;
+
+    for (const point& p : graph.points) {
+        const double dx = p.pos_x - x;
+        const double dy = p.pos_y - y;
+        if (dx * dx + dy * dy <= snap2)
+            return p.id;
+    }
+
+    const int id = static_cast<int>(graph.points.size());
+    graph.points.emplace_back(x, y, id);
+    graph.set_point_is_normal(id, false); // new points sit on the border
+    return id;
+}
+
+// True when some edge incident to `from` already leaves it in the direction
+// (dx, dy) (a unit vector). Extending along it would retrace an existing crease
+// with a second, overlapping edge; the crease line already continues from this
+// vertex, and that neighbour is extended on its own turn.
+bool has_collinear_edge_ahead(const origamiGraph& graph, int from, int toward,
+                              double dx, double dy) {
+    for (const edge& e : graph.edges) {
+        int other = -1;
+        if (e.p1.id == from)
+            other = e.p2.id;
+        else if (e.p2.id == from)
+            other = e.p1.id;
+
+        if (other < 0 || other == toward)
+            continue;
+
+        const double ex = graph.points[other].pos_x - graph.points[from].pos_x;
+        const double ey = graph.points[other].pos_y - graph.points[from].pos_y;
+        const double len = std::hypot(ex, ey);
+        if (len <= 0.0)
+            continue;
+
+        const double ux = ex / len;
+        const double uy = ey / len;
+        const double dot = ux * dx + uy * dy;
+        const double cross = ux * dy - uy * dx;
+        if (dot > 0.0 && std::abs(cross) <= 1e-9)
+            return true;
+    }
+    return false;
+}
+
+bool has_edge_between(const origamiGraph& graph, int a, int b) {
+    for (const edge& e : graph.edges) {
+        const int u = e.p1.id;
+        const int v = e.p2.id;
+        if ((u == a && v == b) || (u == b && v == a))
+            return true;
+    }
+    return false;
+}
+
+void add_stub(origamiGraph& graph, int from, int to, char type) {
+    if (from == to || has_edge_between(graph, from, to))
+        return;
+
+    const int id = static_cast<int>(graph.edges.size());
+    graph.edges.emplace_back(graph.points[from], graph.points[to], id);
+    graph.edges.back().type = type;
+}
+
+} // namespace
 
 void make_intersections(const origamiGraph& original, origamiGraph& new_graph) {
     (void)original;
@@ -779,12 +945,135 @@ void make_intersections(const origamiGraph& original, origamiGraph& new_graph) {
 }
 
 void extend_edges(const origamiGraph& original, origamiGraph& new_graph) {
-    (void)original;
-    (void)new_graph;
+    new_graph = origamiGraph{};
+    new_graph.set_num_corners(original.num_corners());
+
+    if (original.points.empty())
+        return;
+
+    if (original.num_corners() < kMinCorners ||
+        original.num_corners() > static_cast<int>(original.points.size())) {
+        std::cerr << "extend: the source graph does not declare a valid paper outline "
+                     "(it needs at least " << kMinCorners << " corners).\n";
+        return;
+    }
+
+    // 1. Copy the pattern. The edges are rebuilt on top of the copied points so
+    //    that the "edge id == index" / "point id == index" invariant holds.
+    new_graph.points = original.points;
+    for (point& p : new_graph.points) {
+        p.local_edges.clear();
+        p.local_angles.clear();
+    }
+
+    const int num_points = static_cast<int>(new_graph.points.size());
+    new_graph.edges.reserve(original.edges.size());
+    for (const edge& e : original.edges) {
+        const int u = e.p1.id;
+        const int v = e.p2.id;
+        if (u < 0 || v < 0 || u >= num_points || v >= num_points)
+            continue;
+
+        new_graph.edges.emplace_back(new_graph.points[u], new_graph.points[v],
+                                     static_cast<int>(new_graph.edges.size()));
+        new_graph.edges.back().type = e.type;
+    }
+
+    // 2. Boundary flags: corners first, then the input points that happen to
+    //    lie on the outline (they must not be extended either).
+    new_graph.refresh_boundary_flags();
+
+    const double scale = new_graph.paper_scale();
+    const double eps = kBoundaryEpsFactor * scale;
+    const double nudge = eps * kBoundaryNudgeFraction;
+    const std::vector<boundary_segment> segments = new_graph.boundary_segments();
+
+    for (const point& p : original.points) {
+        if (new_graph.is_normal_point(p.id) && new_graph.point_on_boundary(p, eps))
+            new_graph.set_point_is_normal(p.id, false);
+    }
+
+    // 3. Extend every endpoint that is not already on the border along its own
+    //    line. Collisions with the other creases are deliberately ignored.
+    const auto extend_endpoint = [&](int from, int toward, char type) {
+        if (new_graph.is_boundary_point(from))
+            return;
+
+        // Local copies: find_or_add_point() below can reallocate points.
+        const double fx = new_graph.points[from].pos_x;
+        const double fy = new_graph.points[from].pos_y;
+        const double tx = new_graph.points[toward].pos_x;
+        const double ty = new_graph.points[toward].pos_y;
+
+        double dx = fx - tx;
+        double dy = fy - ty;
+        const double length = std::hypot(dx, dy);
+        if (length <= 0.0)
+            return;
+        dx /= length;
+        dy /= length;
+
+        // The crease already continues in this direction from `from` (e.g. two
+        // collinear input edges sharing the vertex): that neighbour reaches the
+        // border on its own turn, so adding a stub would duplicate the crease.
+        if (has_collinear_edge_ahead(new_graph, from, toward, dx, dy))
+            return;
+
+        ray_hit hit;
+        if (!first_boundary_hit(fx, fy, dx, dy, segments, eps, hit)) {
+            std::cerr << "extend: no paper boundary found from point " << from
+                      << " along (" << dx << ", " << dy << "); edge left as is.\n";
+            return;
+        }
+
+        // A hit on a corner (or on a previously created boundary point) reuses
+        // the existing vertex instead of creating a nearly duplicate one.
+        int to = -1;
+        const double snap2 = eps * eps;
+        for (const point& p : new_graph.points) {
+            const double px = p.pos_x - hit.x;
+            const double py = p.pos_y - hit.y;
+            if (px * px + py * py <= snap2) {
+                to = p.id;
+                break;
+            }
+        }
+
+        if (to < 0) {
+            // The exact intersection is on the border; store the point a hair
+            // inside it so floating point noise cannot put it outside.
+            to = find_or_add_point(new_graph, hit.x - dx * nudge,
+                                   hit.y - dy * nudge, eps);
+        }
+
+        add_stub(new_graph, from, to, type);
+    };
+
+    for (const edge& e : original.edges) {
+        const int a = e.p1.id;
+        const int b = e.p2.id;
+        if (a == b || a < 0 || b < 0 || a >= num_points || b >= num_points)
+            continue;
+
+        extend_endpoint(a, b, e.type);
+        extend_endpoint(b, a, e.type);
+    }
+
+    // 4. Rebuild the incidence lists and the CCW ordering/angles of the result.
+    for (point& p : new_graph.points) {
+        p.local_edges.clear();
+        p.local_angles.clear();
+    }
+    for (const edge& e : new_graph.edges) {
+        new_graph.points[e.p1.id].local_edges.push_back(e.id);
+        new_graph.points[e.p2.id].local_edges.push_back(e.id);
+    }
+
+    new_graph.fix();
 }
 
 // ---------------------------------------------------------------------------
-// Corner checks (identical to the old main)
+// Corner checks 
 // ---------------------------------------------------------------------------
 
 // The base of the angles is always the lowest corner of the paper. When two

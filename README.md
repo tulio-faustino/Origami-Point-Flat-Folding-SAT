@@ -150,7 +150,27 @@ a reflex gap, above 180°, wraps around the outside of the vertex):
 *`plot/img/ccw_test_angles.png` — the gaps `p.local_angles` of every point. Each arc ends with a
 small arrow showing the counter-clockwise direction, and the gaps of a point sum to $2\pi$.*
 
-### 6. Still open: collisions and overlapping creases
+### 6. Extending the creases to the paper border
+
+`extend <src> [dst]` copies the pattern into a new named graph `<dst>` (default `<src>_extended`)
+and extends every edge along its own line until it hits the paper outline, creating the new points
+and edges that the crease pattern was missing. The outline itself is never stored as a crease: the
+segments between consecutive corners are built only to detect the hit.
+
+Two details matter here. First, the intersection is computed in floating point and may land a hair
+outside the paper, so the stored point is nudged slightly *inside* the border (by a fraction of the
+geometric tolerance) and is marked as a boundary point. Second, when the hit lands on a corner (or
+on a point created by a previous extension) the existing vertex is reused instead of creating a
+nearly duplicate one. An endpoint whose crease already continues collinearly from the same vertex
+is not extended again, which would otherwise add a second, overlapping crease.
+
+The graph carries a per-point boundary flag (`origamiGraph::point_is_normal`: `1` = normal, `0` =
+on the paper boundary) with one entry per point id, because the old positional rule "id <
+num_corners" is no longer enough once there are new points on the border. The solver uses it for
+the Maekawa-Justin count: an even-degree boundary vertex is skipped (its paper angle is not in the
+graph), while odd-degree vertices keep the $|M|-|V| = 1$ boundary rule.
+
+### 7. Still open: collisions and overlapping creases
 
 The graph format assumes that every crease starts and ends at a point that is given in the input,
 and that is not general enough yet. Two cases are still unsolved and I am thinking about how to

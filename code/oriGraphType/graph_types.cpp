@@ -1,7 +1,8 @@
 #include "graph_types.hpp"
 
-#include <algorithm>  // std::ranges::sort
-#include <cmath>      // std::atan2, std::fmod, std::isfinite, std::round
+#include <algorithm>  // std::min, std::ranges::sort
+#include <cmath>      // std::atan2, std::fmod, std::hypot, std::isfinite, std::round
+#include <cstddef>    // std::size_t
 #include <functional> // std::less
 #include <ranges>     // std::views::zip (C++23)
 #include <tuple>      // std::get over zip_view's tuple
@@ -22,6 +23,106 @@ std::vector<point> origamiGraph::corners() const {
         n = static_cast<int>(points.size());
 
     return std::vector<point>(points.begin(), points.begin() + n);
+}
+
+namespace {
+
+// Squared distance from (px, py) to the segment `s`.
+double distance2_to_segment(double px, double py, const boundary_segment& s) {
+    const double vx = s.x2 - s.x1;
+    const double vy = s.y2 - s.y1;
+    const double wx = px - s.x1;
+    const double wy = py - s.y1;
+
+    const double len2 = vx * vx + vy * vy;
+    double t = (len2 > 0.0) ? (wx * vx + wy * vy) / len2 : 0.0;
+    if (t < 0.0)
+        t = 0.0;
+    else if (t > 1.0)
+        t = 1.0;
+
+    const double dx = px - (s.x1 + t * vx);
+    const double dy = py - (s.y1 + t * vy);
+    return dx * dx + dy * dy;
+}
+
+} // namespace
+
+bool origamiGraph::is_normal_point(int id) const {
+    if (id < 0 || id >= static_cast<int>(points.size()))
+        return false;
+
+    if (id < static_cast<int>(point_is_normal.size()))
+        return point_is_normal[id] != 0;
+
+    // No flag for this point: fall back to the positional convention.
+    return id >= num_corners_;
+}
+
+void origamiGraph::set_point_is_normal(int id, bool normal) {
+    if (id < 0 || id >= static_cast<int>(points.size()))
+        return;
+
+    if (static_cast<int>(point_is_normal.size()) <= id)
+        point_is_normal.resize(static_cast<std::size_t>(id) + 1, 1);
+
+    point_is_normal[id] = normal ? 1 : 0;
+}
+
+void origamiGraph::refresh_boundary_flags() {
+    point_is_normal.assign(points.size(), 1);
+
+    const int n = std::min<int>(num_corners_, static_cast<int>(points.size()));
+    for (int i = 0; i < n; ++i)
+        point_is_normal[i] = 0;
+}
+
+double origamiGraph::paper_scale() const {
+    const std::vector<point> outline = corners();
+    if (outline.empty())
+        return 1.0;
+
+    double min_x = outline[0].pos_x, max_x = outline[0].pos_x;
+    double min_y = outline[0].pos_y, max_y = outline[0].pos_y;
+
+    for (const point& p : outline) {
+        min_x = std::min(min_x, p.pos_x);
+        max_x = std::max(max_x, p.pos_x);
+        min_y = std::min(min_y, p.pos_y);
+        max_y = std::max(max_y, p.pos_y);
+    }
+
+    const double diagonal = std::hypot(max_x - min_x, max_y - min_y);
+    return diagonal > 1.0 ? diagonal : 1.0;
+}
+
+std::vector<boundary_segment> origamiGraph::boundary_segments() const {
+    const std::vector<point> outline = corners();
+
+    std::vector<boundary_segment> segments;
+    const int n = static_cast<int>(outline.size());
+    if (n < kMinCorners)
+        return segments;
+
+    segments.reserve(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) {
+        const point& a = outline[i];
+        const point& b = outline[(i + 1) % n];
+        segments.push_back({a.pos_x, a.pos_y, b.pos_x, b.pos_y});
+    }
+    return segments;
+}
+
+bool origamiGraph::point_on_boundary(const point& p, double eps) const {
+    if (eps < 0.0)
+        eps = 0.0;
+
+    const double eps2 = eps * eps;
+    for (const boundary_segment& s : boundary_segments()) {
+        if (distance2_to_segment(p.pos_x, p.pos_y, s) <= eps2)
+            return true;
+    }
+    return false;
 }
 
 // Sorts the edges in a point counter-clockwise
