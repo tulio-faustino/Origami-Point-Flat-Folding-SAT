@@ -139,9 +139,9 @@ int run_solve(origamiGraph& graph);
 // extend_edges(): copies the pattern and, for every edge endpoint that does not
 // already lie on the paper border, casts a ray along the edge's own line until
 // it hits the outline. The hit becomes a new boundary point (snapped to an
-// existing point when within tolerance) and a stub edge, with the same type as
-// the edge it extends, is added. Collisions with the other creases are NOT
-// handled here (that is what intersections() will be for).
+// existing point when within tolerance) and a stub edge with the base (dummy)
+// type kBaseEdgeType is added. Collisions with the other creases are NOT handled
+// here (that is what intersections() will be for).
 void make_intersections(const origamiGraph& original, origamiGraph& new_graph);
 void extend_edges(const origamiGraph& original, origamiGraph& new_graph);
 
@@ -747,7 +747,6 @@ bool load_graph(std::istream& in, origamiGraph& graph, std::string& error) {
     }
 
     graph.edges.reserve(num_edges);
-    const char test_assignment[3] = {'0', 'M', 'V'};
 
     // Inserts edges
     for (int i = 0; i < num_edges; ++i) {
@@ -770,7 +769,7 @@ bool load_graph(std::istream& in, origamiGraph& graph, std::string& error) {
 
         // u and v correspond to point indices in the 'points' vector
         graph.edges.emplace_back(graph.points[u], graph.points[v], i); // ID synchronized with the index i
-        graph.edges[i].type = test_assignment[i % 3];
+        graph.edges[i].type = kBaseEdgeType;
         // Pushes the edge id to the points
         graph.points[u].local_edges.push_back(i);
         graph.points[v].local_edges.push_back(i);
@@ -928,13 +927,13 @@ bool has_edge_between(const origamiGraph& graph, int a, int b) {
     return false;
 }
 
-void add_stub(origamiGraph& graph, int from, int to, char type) {
+void add_stub(origamiGraph& graph, int from, int to) {
     if (from == to || has_edge_between(graph, from, to))
         return;
 
     const int id = static_cast<int>(graph.edges.size());
     graph.edges.emplace_back(graph.points[from], graph.points[to], id);
-    graph.edges.back().type = type;
+    graph.edges.back().type = kBaseEdgeType; // extension has no fold assigned yet
 }
 
 } // namespace
@@ -995,7 +994,7 @@ void extend_edges(const origamiGraph& original, origamiGraph& new_graph) {
 
     // 3. Extend every endpoint that is not already on the border along its own
     //    line. Collisions with the other creases are deliberately ignored.
-    const auto extend_endpoint = [&](int from, int toward, char type) {
+    const auto extend_endpoint = [&](int from, int toward) {
         if (new_graph.is_boundary_point(from))
             return;
 
@@ -1046,7 +1045,7 @@ void extend_edges(const origamiGraph& original, origamiGraph& new_graph) {
                                    hit.y - dy * nudge, eps);
         }
 
-        add_stub(new_graph, from, to, type);
+        add_stub(new_graph, from, to);
     };
 
     for (const edge& e : original.edges) {
@@ -1055,8 +1054,8 @@ void extend_edges(const origamiGraph& original, origamiGraph& new_graph) {
         if (a == b || a < 0 || b < 0 || a >= num_points || b >= num_points)
             continue;
 
-        extend_endpoint(a, b, e.type);
-        extend_endpoint(b, a, e.type);
+        extend_endpoint(a, b);
+        extend_endpoint(b, a);
     }
 
     // 4. Rebuild the incidence lists and the CCW ordering/angles of the result.

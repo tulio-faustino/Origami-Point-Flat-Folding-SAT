@@ -21,6 +21,12 @@ constexpr double PI = 3.141592653589793;
 inline constexpr int kDefaultCorners = 4;
 inline constexpr int kMinCorners = 3;
 
+// Type given to a crease that has no fold assigned yet ("plain crease" in the
+// output format). Every edge of a freshly read pattern starts with it, and the
+// stubs created by extend_edges() use it as well; the solver later overwrites
+// the types with 'M' / 'V' in its own assignment.
+inline constexpr char kBaseEdgeType = '0';
+
 // Tolerance of the paper-boundary helpers. It is RELATIVE to the size of the
 // paper (origamiGraph::paper_scale()), so the same pattern quoted in
 // millimetres and in metres gets the same treatment; paper_scale() has a floor

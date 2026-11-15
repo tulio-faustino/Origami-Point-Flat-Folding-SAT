@@ -104,9 +104,9 @@ The program then writes the pattern to `plot/instructions/*.txt`, and
 `plot_generator/scripts/graph_plotter.py`
 renders it into `plot/img/*.png` (see `comp_run_instructions.txt` for the commands).
 
-The assignment is not decided yet: for now every edge gets a type by simply cycling through
-`'0'`, `'M'` and `'V'`, only so that the whole pipeline has something to draw. The SAT encoding
-that will actually choose them is the next step.
+Every edge of a freshly read pattern starts with the base type `'0'` (plain crease, no fold
+assigned yet), so that the whole pipeline has something to draw; the SAT encoding writes the
+actual `'M'`/`'V'` assignment to `sort.txt`.
 
 ### 3. How the output shows each assignment
 
@@ -154,8 +154,9 @@ small arrow showing the counter-clockwise direction, and the gaps of a point sum
 
 `extend <src> [dst]` copies the pattern into a new named graph `<dst>` (default `<src>_extended`)
 and extends every edge along its own line until it hits the paper outline, creating the new points
-and edges that the crease pattern was missing. The outline itself is never stored as a crease: the
-segments between consecutive corners are built only to detect the hit.
+and edges that the crease pattern was missing. The new edges use the same base type `'0'` as the
+input edges (the extension has no fold assigned yet). The outline itself is never stored as a
+crease: the segments between consecutive corners are built only to detect the hit.
 
 Two details matter here. First, the intersection is computed in floating point and may land a hair
 outside the paper, so the stored point is nudged slightly *inside* the border (by a fraction of the
