@@ -40,12 +40,15 @@ that the SAT encoding will need. The MV assignment itself is still a placeholder
 
 ### 1. Input
 
-The input is a plain text file describing a graph (see `test_files/graph.in`): first the number of
-points, then one `x y` line per point, then the number of edges, and finally one `u v` line per
-edge, where `u` and `v` are point indices. The `test_files/graph.in` file looks like this:
+The input is a plain text file describing a graph (see `test_files/graph.in`): the first line holds
+the number of corners followed by the number of points, then one `x y` line per point, then the
+number of edges, and finally one `u v` line per edge, where `u` and `v` are point indices. The
+corners are the points that define the paper boundary and are taken to be the first points of the
+file; there must be at least 3 of them and at most as many as there are points. The
+`test_files/graph.in` file looks like this:
 
 ```
-9
+4 9
 0 0
 100 0
 0 100

@@ -23,14 +23,42 @@ void ccw_sort_point_edges(point &p, std::vector<edge> &e);
 
 void find_angles(point &p, std::vector<edge> &e);
 
+void make_intersections(std::vector<point> &o_Points, std::vector<edge> &o_Edges,
+                            std::vector<point> &new_points, std::vector<edge> &new_edges){};
+
+void extend_edges(std::vector<point> &o_Points, std::vector<edge> &o_Edges,
+                    std::vector<point> &new_points, std::vector<edge> &new_edges){};
+
 int main() {
 
     std::ios_base::sync_with_stdio(false);
     std::cin.tie(nullptr);
 
+    // The first line is "num_corners num_points": the number of corners comes
+    // right before the number of points. The corners are the points that define
+    // the paper boundary and are assumed to be the first ones of the file
+    // (ids 0 .. num_corners - 1).
+    int num_corners = 0;
     int num_points = 0;
-    if (!(std::cin >> num_points)) {
-        std::cerr << "Error: Failed to read number of points.\n";
+    if (!(std::cin >> num_corners >> num_points)) {
+        std::cerr << "Error: Failed to read the number of corners and points.\n";
+        return 1;
+    }
+
+    // Sanity checks on the paper outline: a closed crease pattern needs at least
+    // three corners (a triangle) and there can never be more corners than
+    // points, since every corner is one of the points.
+    if (num_corners < kMinCorners) {
+        std::cerr << "Error: The crease pattern needs at least " << kMinCorners
+                  << " corners (the points that define the paper boundary), got "
+                  << num_corners << ".\n";
+        return 1;
+    }
+
+    if (num_corners > num_points) {
+        std::cerr << "Error: The number of corners (" << num_corners
+                  << ") cannot be larger than the number of points ("
+                  << num_points << ").\n";
         return 1;
     }
 
@@ -82,7 +110,7 @@ int main() {
     // local_angles is already filled, which is exactly what the encoder needs.
     // The graph is moved into the solver, and points() / edges() below give the
     // plotting code read access to it after solve().
-    MVAssignmentSolver solver(std::move(points), std::move(edges));
+    MVAssignmentSolver solver(std::move(points), std::move(edges), num_corners);
 
     // solve() is where the SMT instance is actually created and decided.
     const bool sat = solver.solve();

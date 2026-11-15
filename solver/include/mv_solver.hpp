@@ -7,15 +7,7 @@
 #include "graph_types.hpp"
 
 // ---------------------------------------------------------------------------
-// MV assignment solver (the only part of the program that talks to cvc5).
-//
-// main() keeps just the input handling: it parses the pattern, fills
-// p.local_edges (sorted counter-clockwise) and p.local_angles, and then hands
-// the finished pattern over:
-//
-//     MVAssignmentSolver solver(std::move(points), std::move(edges));
-//     if (solver.solve())          // SAT: the SMT instance was created here
-//         solver.assignment();     // 'M' / 'V' per edge id
+// MV assignment solver 
 //
 // Everything that builds or reads the SMT instance lives in this class:
 //   - the Kawasaki-Justin check (decided in plain C++, before the solver is
@@ -34,44 +26,6 @@
 inline constexpr double kAngleEpsRad = 1e-9;
 
 class MVAssignmentSolver {
-public:
-    // `points` must already carry local_edges (CCW sorted) and local_angles;
-    // the class does not touch the geometry, it only encodes it.
-    //
-    // num_corners: the first num_corners points of the input (ids
-    // 0 .. num_corners - 1) are the corners of the paper. The input format has
-    // no boundary flag, so this positional convention is the only boundary
-    // information available (see assert_maekawa).
-    MVAssignmentSolver(std::vector<point> points, std::vector<edge> edges,
-                       int num_corners = kDefaultCorners);
-
-    // Builds the cvc5 instance and decides it.
-    //
-    // Returns true on SAT, with assignment() holding one 'M' / 'V' per edge.
-    // On UNSAT or UNKNOWN returns false, assignment() becomes {'U'} and the
-    // reason is reported on stderr.
-    bool solve();
-
-    // Result of the last solve():
-    //   SAT            -> num_edges() characters, 'M' or 'V', indexed by edge id
-    //   UNSAT/UNKNOWN  -> single-element {'U'}
-    //   before solve() -> empty
-    const std::vector<char>& assignment() const { return assignment_; }
-
-    // Independent check of the finished assignment, in plain C++ (no cvc5).
-    // The encoder is easy to get wrong, so the model is re-verified from the
-    // 'M' / 'V' characters instead of trusting the solver. Prints one line per
-    // vertex and returns false if any Maekawa-Justin count is violated.
-    bool validate_assignment() const;
-
-    int num_points() const { return num_points_; }
-    int num_edges() const { return num_edges_; }
-    int num_corners() const { return num_corners_; }
-
-    // Read access to the pattern the solver was built from.
-    const std::vector<point>& points() const { return points_; }
-    const std::vector<edge>& edges() const { return edges_; }
-
 private:
     // -----------------------------------------------------------------------
     // Kawasaki-Justin theorem, checked OUTSIDE the solver.
@@ -140,4 +94,43 @@ private:
     int num_points_ = 0;
     int num_edges_ = 0;
     int num_corners_ = kDefaultCorners;
+
+public:
+    // `points` must already carry local_edges (CCW sorted) and local_angles;
+    // the class does not touch the geometry, it only encodes it.
+    //
+    // num_corners: the first num_corners points of the input (ids
+    // 0 .. num_corners - 1) are the corners of the paper. The count comes from
+    // the first line of the input file and the positional convention above is
+    // the only boundary information available (see assert_maekawa).
+    MVAssignmentSolver(std::vector<point> points, std::vector<edge> edges,
+                       int num_corners = kDefaultCorners);
+
+    // Builds the cvc5 instance and decides it.
+    //
+    // Returns true on SAT, with assignment() holding one 'M' / 'V' per edge.
+    // On UNSAT or UNKNOWN returns false, assignment() becomes {'U'} and the
+    // reason is reported on stderr.
+    bool solve();
+
+    // Result of the last solve():
+    //   SAT            -> num_edges() characters, 'M' or 'V', indexed by edge id
+    //   UNSAT/UNKNOWN  -> single-element {'U'}
+    //   before solve() -> empty
+    const std::vector<char>& assignment() const { return assignment_; }
+
+    // Independent check of the finished assignment, in plain C++ (no cvc5).
+    // The encoder is easy to get wrong, so the model is re-verified from the
+    // 'M' / 'V' characters instead of trusting the solver. Prints one line per
+    // vertex and returns false if any Maekawa-Justin count is violated.
+    bool validate_assignment() const;
+
+    int num_points() const { return num_points_; }
+    int num_edges() const { return num_edges_; }
+    int num_corners() const { return num_corners_; }
+
+    // Read access to the pattern the solver was built from.
+    const std::vector<point>& points() const { return points_; }
+    const std::vector<edge>& edges() const { return edges_; }
+
 };

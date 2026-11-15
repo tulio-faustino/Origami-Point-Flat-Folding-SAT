@@ -13,10 +13,11 @@
 
 constexpr double PI = 3.141592653589793;
 
-// The input format has no boundary flag: the corners of the paper are assumed
-// to be the first points of the file (ids 0 .. kDefaultCorners - 1). The
-// default paper is a square (4 corners); a closed crease pattern needs at
-// least a triangle (3).
+// The input format carries the number of corners on its first line (right
+// before the number of points), and the corners of the paper are assumed to be
+// the first points of the file (ids 0 .. num_corners - 1). kDefaultCorners is
+// only the fallback when the count is not given; a closed crease pattern needs
+// at least a triangle (kMinCorners).
 inline constexpr int kDefaultCorners = 4;
 inline constexpr int kMinCorners = 3;
 
