@@ -82,19 +82,25 @@ The `test_files/graph.in` file looks like this:
 6 8
 ```
 
+Once the pattern is read the program waits for a command typed on the terminal (the input comes
+from the redirect, so the commands are read from `/dev/tty`): `solve` runs everything described
+below, `help` lists the commands and `quit` (or Ctrl-D) leaves. The line you type is prefixed with
+`> `, and the exit code of the process is the status of the last `solve`. With no terminal attached
+(scripts, CI) the pattern is solved immediately, as before.
+
 ### 2. What is done with it
 
-For every point, the program
+For every point, the program (`origamiGraph::fix()`, which calls the two methods below)
 
 1. **collects the incident edges** into `p.local_edges` (an edge id is pushed into the list of both
    of its endpoints);
 2. **sorts those edges counter-clockwise** around the point, starting from the positive x axis
-   (`ccw_sort_point_edges`), so `p.local_edges[k]` is the k-th edge of that point in CCW order;
-3. **computes the angle between consecutive edges** (`find_angles`): `p.local_angles[k]` is the CCW
+   (`origamiGraph::ccw_sort_point_edges`), so `p.local_edges[k]` is the k-th edge of that point in CCW order;
+3. **computes the angle between consecutive edges** (`origamiGraph::find_angles`): `p.local_angles[k]` is the CCW
    angle from `p.local_edges[k]` to the next one, so the gaps around a point always add up to
    $2\pi$. These are exactly the angles that the Kawasaki-Justin theorem needs.
 
-The program then writes the pattern to `plot/instructions/*.plot`, and
+The program then writes the pattern to `plot/instructions/*.txt`, and
 `plot_generator/scripts/graph_plotter.py`
 renders it into `plot/img/*.png` (see `comp_run_instructions.txt` for the commands).
 

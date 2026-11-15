@@ -7,17 +7,15 @@
 #include <utility>
 
 // ---------------------------------------------------------------------------
-// Construction: the class simply takes ownership of the pattern main() already
-// prepared (local_edges in CCW order and local_angles filled in).
+// Construction: the class simply copies the pattern main() already prepared
+// (local_edges in CCW order and local_angles filled in), including the corner
+// count that now lives in the graph.
 // ---------------------------------------------------------------------------
-MVAssignmentSolver::MVAssignmentSolver(std::vector<point> points,
-                                       std::vector<edge> edges,
-                                       int num_corners)
-    : points_(std::move(points)),
-      edges_(std::move(edges)),
-      num_points_(static_cast<int>(points_.size())),
-      num_edges_(static_cast<int>(edges_.size())),
-      num_corners_(num_corners) {
+MVAssignmentSolver::MVAssignmentSolver(const origamiGraph& graph)
+    : graph_(graph),
+      num_points_(static_cast<int>(graph_.points.size())),
+      num_edges_(static_cast<int>(graph_.edges.size())),
+      num_corners_(graph_.num_corners()) {
     // Configuration error, not a property of a single vertex: fail loudly
     // instead of silently encoding the wrong side of the theorem.
     if (num_corners_ < kMinCorners) {
@@ -66,14 +64,14 @@ bool MVAssignmentSolver::solve()
 
     // First property being verified is Maekawa ||V| - |M|| = 2: one call per
     // vertex.
-    for (const point& pt : points_)
+    for (const point& pt : graph_.points)
         assert_maekawa(solver, tm, x, pt);
 
     // Then sum En must be 360: Kawasaki is decided statically, in
     // verify_kawasaki() above, so there is nothing left to assert for it.
 
     // Big little big lemma (uses the angles): one call per vertex.
-    for (const point& pt : points_)
+    for (const point& pt : graph_.points)
         assert_big_little_big(solver, tm, x, pt);
 
     cvc5::Result res = solver.checkSat();
@@ -101,8 +99,9 @@ bool MVAssignmentSolver::solve()
 // Independent check of a finished assignment.
 //
 // The encoder is easy to get wrong, so the model is re-verified in plain C++
-// from the 'M' / 'V' characters instead of trusting the solver. Prints one line
-// per vertex and returns false if any check fails.
+// from the 'M' / 'V' characters instead of trusting the solver. Silent when the
+// assignment is valid; reports the offending vertices on stderr and returns
+// false otherwise.
 // ---------------------------------------------------------------------------
 bool MVAssignmentSolver::validate_assignment() const
 {
@@ -114,7 +113,7 @@ bool MVAssignmentSolver::validate_assignment() const
 
     bool ok = true;
 
-    for (const point& pt : points_) {
+    for (const point& pt : graph_.points) {
         const int deg = static_cast<int>(pt.local_edges.size());
         if (deg == 0)
             continue;
@@ -140,10 +139,14 @@ bool MVAssignmentSolver::validate_assignment() const
         const bool vacuous = (deg - k) / 2 <= 0 && (deg + k) / 2 >= deg;
         const bool good = vacuous || std::abs(diff) == k;
 
-        std::cout << "  point " << pt.id << " (d=" << deg
-                  << (is_boundary ? ", boundary" : ", interior") << "): "
-                  << mountains << "M " << valleys << "V -> |M|-|V| = " << diff
-                  << (vacuous ? " (vacuous)" : (good ? " OK" : " VIOLATED")) << "\n";
+        if (!good) {
+            std::cerr << "Maekawa-Justin violated at point " << pt.id << " (d=" << deg
+                      << (is_boundary ? ", boundary" : ", interior") << "): "
+                      << mountains << "M " << valleys << "V -> |M|-|V| = " << diff
+                      << ", expected " << k << ".\n";
+            std::cerr << "  (the paper boundary takes the missing angle, so its rule is "
+                         "||M|-|V|| = 1; interior vertices need 2)\n";
+        }
 
         ok = ok && good;
     }
@@ -165,7 +168,7 @@ bool MVAssignmentSolver::verify_kawasaki(double eps) const
     bool all_ok = true;
     int offenders = 0;
 
-    for (const point& pt : points_) {
+    for (const point& pt : graph_.points) {
         const int deg = static_cast<int>(pt.local_angles.size());
 
         // Degree < 2 has no alternating sum; odd degree is a boundary vertex

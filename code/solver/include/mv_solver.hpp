@@ -17,8 +17,8 @@
 //   - the read-back of the model, and
 //   - an independent re-check of that model.
 //
-// The pattern stays owned by the object after solve(); points() / edges() give
-// the plotting code read access to it.
+// The pattern stays owned by the object after solve(); graph() (and the
+// points() / edges() shortcuts) give the plotting code read access to it.
 // ---------------------------------------------------------------------------
 
 // Tolerance (in RADIANS) for the static geometric checks. The gaps come from
@@ -88,23 +88,23 @@ private:
                                const std::vector<cvc5::Term>& x,
                                const point& pt) const;
 
-    std::vector<point> points_;
-    std::vector<edge> edges_;
+    origamiGraph graph_;
     std::vector<char> assignment_; // filled by solve()
     int num_points_ = 0;
     int num_edges_ = 0;
     int num_corners_ = kDefaultCorners;
 
 public:
-    // `points` must already carry local_edges (CCW sorted) and local_angles;
-    // the class does not touch the geometry, it only encodes it.
+    // The graph must already carry the boundary count (num_corners), plus
+    // local_edges (CCW sorted) and local_angles for every point; the class does
+    // not touch the geometry, it only encodes it. The graph is copied, so the
+    // caller's pattern stays intact and solve() can be repeated.
     //
-    // num_corners: the first num_corners points of the input (ids
+    // num_corners: the first num_corners points of the graph (ids
     // 0 .. num_corners - 1) are the corners of the paper. The count comes from
     // the first line of the input file and the positional convention above is
     // the only boundary information available (see assert_maekawa).
-    MVAssignmentSolver(std::vector<point> points, std::vector<edge> edges,
-                       int num_corners = kDefaultCorners);
+    explicit MVAssignmentSolver(const origamiGraph& graph);
 
     // Builds the cvc5 instance and decides it.
     //
@@ -121,8 +121,12 @@ public:
 
     // Independent check of the finished assignment, in plain C++ (no cvc5).
     // The encoder is easy to get wrong, so the model is re-verified from the
-    // 'M' / 'V' characters instead of trusting the solver. Prints one line per
-    // vertex and returns false if any Maekawa-Justin count is violated.
+    // 'M' / 'V' characters instead of trusting the solver.
+    //
+    // It is silent when the model is valid: only the offending vertices are
+    // reported on stderr, together with the expected count (||M|-|V|| = 2 at
+    // interior vertices, = 1 on the paper boundary, whose own angle closes the
+    // fan). Returns false if any Maekawa-Justin count is violated.
     bool validate_assignment() const;
 
     int num_points() const { return num_points_; }
@@ -130,7 +134,8 @@ public:
     int num_corners() const { return num_corners_; }
 
     // Read access to the pattern the solver was built from.
-    const std::vector<point>& points() const { return points_; }
-    const std::vector<edge>& edges() const { return edges_; }
+    const origamiGraph& graph() const { return graph_; }
+    const std::vector<point>& points() const { return graph_.points; }
+    const std::vector<edge>& edges() const { return graph_.edges; }
 
 };

@@ -20,7 +20,15 @@ __pycache__/
 *.pyc
 
 # --- Saídas geradas pelos scripts (plot_generator/scripts/graph_plotter.py) ---
-plot/instructions
+# instruções .txt e imagens geradas pelo console (print ...) ficam fora do repo;
+# só os exemplos versionados abaixo continuam rastreados.
+plot/instructions/
+plot/img/*.png
+!plot/img/graph.png
+!plot/img/origami.png
+!plot/img/sort.png
+!plot/img/ccw_test.png
+!plot/img/ccw_test_angles.png
 
 # --- local documentation ---
 docs/

@@ -8,7 +8,7 @@ from matplotlib.patches import Arc
 
 # ---------------------------------------------------------------------------
 # Directory layout, resolved from the repository root:
-#   plot/instructions/  <- .plot files written by the C++ printing functions
+#   plot/instructions/  <- .txt files written by the C++ printing functions
 #   plot/img/           <- images rendered by this script
 #
 # The script may live directly in <root>/scripts/ or nested one level deeper
@@ -31,8 +31,8 @@ ROOT_DIR = _find_root(os.path.dirname(os.path.dirname(os.path.abspath(__file__))
 INSTRUCTIONS_DIR = os.path.join(ROOT_DIR, 'plot', 'instructions')
 IMG_DIR = os.path.join(ROOT_DIR, 'plot', 'img')
 
-ORIGAMI_INSTRUCTIONS = os.path.join(INSTRUCTIONS_DIR, 'origami.plot')
-CCW_INSTRUCTIONS = os.path.join(INSTRUCTIONS_DIR, 'ccw_test.plot')
+ORIGAMI_INSTRUCTIONS = os.path.join(INSTRUCTIONS_DIR, 'origami.txt')
+CCW_INSTRUCTIONS = os.path.join(INSTRUCTIONS_DIR, 'ccw_test.txt')
 
 # Size of the local-angle arcs, as a fraction of the shortest edge of the gap.
 ARC_SCALE = 0.33          # gaps up to 180 degrees
@@ -71,7 +71,7 @@ def _clean_lines(stream):
 
 
 def main(path=None, out_path=None, show=True, use_stdin=False):
-    """Plot the crease pattern read from `path` (default: plot/instructions/origami.plot).
+    """Plot the crease pattern read from `path` (default: plot/instructions/origami.txt).
 
     With use_stdin=True the pattern is read from standard input instead.
     """
@@ -139,7 +139,7 @@ def main(path=None, out_path=None, show=True, use_stdin=False):
 
         ax.plot(x_coords, y_coords, color=c, linestyle=ls, linewidth=lw)
 
-    # solve_mv_assignment() writes 'U' on EVERY edge when the instance has no
+    # MVAssignmentSolver::solve() writes 'U' on EVERY edge when the instance has no
     # valid assignment, so the first edge alone identifies the UNSAT case.
     unsat = bool(edges) and edges[0][2] == 'U'
 
@@ -181,13 +181,13 @@ def _parse_args(argv):
                     "into plot/img/.")
     parser.add_argument(
         'instruction', nargs='?', default=None,
-        help="instruction file (default: plot/instructions/origami.plot; "
+        help="instruction file (default: plot/instructions/origami.txt; "
              "use '-' to read from stdin)")
     parser.add_argument(
         '-c', '--ccw', nargs='?', const=CCW_INSTRUCTIONS, default=None,
         metavar='FILE',
         help="plot the ccw ordering test (default: "
-             "plot/instructions/ccw_test.plot)")
+             "plot/instructions/ccw_test.txt)")
     parser.add_argument(
         '-a', '--angles', action='store_true',
         help="with --ccw, also print the local angles in degrees "
@@ -216,7 +216,7 @@ def parse_ccw_file(path):
         <n> <a0> <a1> ... <an-1>          (local angles in RADIANS, optional)
 
     Every angle is measured counter clockwise from the +x axis, so a correct
-    ccw_sort_point_edges() produces a non-decreasing angle column inside each
+    origamiGraph::ccw_sort_point_edges() produces a non-decreasing angle column inside each
     block. The optional extra line holds p.local_angles (gaps between
     consecutive edges); it is converted to degrees here, at print time.
 
@@ -363,7 +363,7 @@ def plot_ccw_sequence(path=None, out_path=None, show=True, show_angles=False):
     number per incident edge - no information is lost even though everything is
     drawn on top of each other.
 
-    Reads plot/instructions/ccw_test.plot by default (written by C++
+    Reads plot/instructions/ccw_test.txt by default (written by C++
     test_ccw_sort) and saves the image into plot/img/.
 
     With show_angles=True the local angles (p.local_angles) are also written in
