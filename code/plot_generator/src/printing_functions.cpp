@@ -107,27 +107,24 @@ double ccw_angle(const point& p, double nx, double ny) {
 } // namespace
 
 
-void generate_plot_file(const std::string& filename, const std::vector<point>& points, const std::vector<edge>& edges) {
+void generate_plot_file(const origamiGraph& graph, const std::string& filename) {
     std::vector<char> types;
-    types.reserve(edges.size());
-    for (const auto& e : edges) {
+    types.reserve(graph.edges.size());
+    for (const auto& e : graph.edges) {
         types.push_back(e.type);
     }
 
-    write_plot_file(filename, points, edges, types);
+    write_plot_file(filename, graph.points, graph.edges, types);
 }
 
 
-void generate_plot_file(const std::vector<point>& points, const std::vector<edge>& edges) {
-    generate_plot_file(plot_paths::kOrigamiPlot, points, edges);
-}
+void generate_sort_plot_file(const origamiGraph& graph,
+                             const std::vector<char>& assignment,
+                             const std::string& filename) {
+    const std::vector<point>& points = graph.points;
+    const std::vector<edge>& edges = graph.edges;
 
-
-void generate_sort_plot_file(const std::string& filename,
-                             const std::vector<point>& points,
-                             const std::vector<edge>& edges,
-                             const std::vector<char>& assignment) {
-    // solve_mv_assignment() reports UNSAT/UNKNOWN as a single-element {'U'}:
+    // The solver reports UNSAT/UNKNOWN as a single-element {'U'}:
     // there is no per-edge assignment then, but the plot is still useful (it
     // shows the pattern that failed), so every edge is marked 'U'.
     const bool unsat = assignment.empty() || assignment.front() == 'U';
@@ -150,17 +147,12 @@ void generate_sort_plot_file(const std::string& filename,
 }
 
 
-void generate_sort_plot_file(const std::vector<point>& points,
-                             const std::vector<edge>& edges,
-                             const std::vector<char>& assignment) {
-    generate_sort_plot_file(plot_paths::kSortPlot, points, edges, assignment);
-}
-
-
-void test_ccw_sort(const std::vector<point>& points,
-                   const std::vector<edge>& edges,
+void test_ccw_sort(const origamiGraph& graph,
                    const std::string& filename,
                    bool with_angles) {
+    const std::vector<point>& points = graph.points;
+    const std::vector<edge>& edges = graph.edges;
+
     if (points.empty()) {
         std::cerr << "CCW test error: the graph has no points.\n";
         return;

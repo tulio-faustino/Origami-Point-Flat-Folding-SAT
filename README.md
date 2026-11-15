@@ -44,15 +44,24 @@ The input is a plain text file describing a graph (see `test_files/graph.in`): t
 the number of corners followed by the number of points, then one `x y` line per point, then the
 number of edges, and finally one `u v` line per edge, where `u` and `v` are point indices. The
 corners are the points that define the paper boundary and are taken to be the first points of the
-file; there must be at least 3 of them and at most as many as there are points. The
-`test_files/graph.in` file looks like this:
+file; there must be at least 3 of them and at most as many as there are points.
+
+The corners are also copied into their own vector (`corners`) and, **only there**, the outline is
+checked against the rule below. Ordering the outline is the responsibility of whoever generates the
+crease pattern: the program never reorders it, it just reports the problem and exits with status 1.
+
+- the corners must be listed **counter-clockwise**;
+- the first corner must be the **lowest** one (it is the base of every angle) and, on a height tie,
+  the **leftmost** one wins.
+
+The `test_files/graph.in` file looks like this:
 
 ```
 4 9
 0 0
 100 0
-0 100
 100 100
+0 100
 50 50
 20 50
 80 50
@@ -65,27 +74,33 @@ file; there must be at least 3 of them and at most as many as there are points. 
 8 4
 4 0
 4 1
-4 2
 4 3
+4 2
 6 7
 5 8
 5 7
 6 8
 ```
 
+Once the pattern is read the program waits for a command typed on the terminal (the input comes
+from the redirect, so the commands are read from `/dev/tty`): `solve` runs everything described
+below, `help` lists the commands and `quit` (or Ctrl-D) leaves. The line you type is prefixed with
+`> `, and the exit code of the process is the status of the last `solve`. With no terminal attached
+(scripts, CI) the pattern is solved immediately, as before.
+
 ### 2. What is done with it
 
-For every point, the program
+For every point, the program (`origamiGraph::fix()`, which calls the two methods below)
 
 1. **collects the incident edges** into `p.local_edges` (an edge id is pushed into the list of both
    of its endpoints);
 2. **sorts those edges counter-clockwise** around the point, starting from the positive x axis
-   (`ccw_sort_point_edges`), so `p.local_edges[k]` is the k-th edge of that point in CCW order;
-3. **computes the angle between consecutive edges** (`find_angles`): `p.local_angles[k]` is the CCW
+   (`origamiGraph::ccw_sort_point_edges`), so `p.local_edges[k]` is the k-th edge of that point in CCW order;
+3. **computes the angle between consecutive edges** (`origamiGraph::find_angles`): `p.local_angles[k]` is the CCW
    angle from `p.local_edges[k]` to the next one, so the gaps around a point always add up to
    $2\pi$. These are exactly the angles that the Kawasaki-Justin theorem needs.
 
-The program then writes the pattern to `plot/instructions/*.plot`, and
+The program then writes the pattern to `plot/instructions/*.txt`, and
 `plot_generator/scripts/graph_plotter.py`
 renders it into `plot/img/*.png` (see `comp_run_instructions.txt` for the commands).
 
