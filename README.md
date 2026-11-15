@@ -44,15 +44,24 @@ The input is a plain text file describing a graph (see `test_files/graph.in`): t
 the number of corners followed by the number of points, then one `x y` line per point, then the
 number of edges, and finally one `u v` line per edge, where `u` and `v` are point indices. The
 corners are the points that define the paper boundary and are taken to be the first points of the
-file; there must be at least 3 of them and at most as many as there are points. The
-`test_files/graph.in` file looks like this:
+file; there must be at least 3 of them and at most as many as there are points.
+
+The corners are also copied into their own vector (`corners`) and, **only there**, the outline is
+checked against the rule below. Ordering the outline is the responsibility of whoever generates the
+crease pattern: the program never reorders it, it just reports the problem and exits with status 1.
+
+- the corners must be listed **counter-clockwise**;
+- the first corner must be the **lowest** one (it is the base of every angle) and, on a height tie,
+  the **leftmost** one wins.
+
+The `test_files/graph.in` file looks like this:
 
 ```
 4 9
 0 0
 100 0
-0 100
 100 100
+0 100
 50 50
 20 50
 80 50
@@ -65,8 +74,8 @@ file; there must be at least 3 of them and at most as many as there are points. 
 8 4
 4 0
 4 1
-4 2
 4 3
+4 2
 6 7
 5 8
 5 7

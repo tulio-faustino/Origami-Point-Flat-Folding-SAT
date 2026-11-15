@@ -29,6 +29,20 @@ void make_intersections(std::vector<point> &o_Points, std::vector<edge> &o_Edges
 void extend_edges(std::vector<point> &o_Points, std::vector<edge> &o_Edges,
                     std::vector<point> &new_points, std::vector<edge> &new_edges){};
 
+// Tolerance used when comparing corner coordinates: two heights closer than
+// this count as a tie.
+constexpr double kCornerEps = 1e-9;
+
+// Index of the corner that has to be the base of the angles: the lowest one,
+// and the leftmost one when two corners share the same height.
+int find_base_corner(const std::vector<point> &corners);
+
+// The paper outline must arrive counter-clockwise, starting from the base
+// corner. Ordering the corners is the responsibility of whoever generates the
+// crease pattern, so this only checks (and reports) the problem, it never fixes
+// the order.
+bool check_corners_ccw(const std::vector<point> &corners);
+
 int main() {
 
     std::ios_base::sync_with_stdio(false);
@@ -70,6 +84,15 @@ int main() {
         std::cin >> x >> y;
         points.emplace_back(x, y, i); // ID synchronized with the index i
     }
+
+    // The corners are also handed over as their own vector: a copy of the first
+    // num_corners points, which are the ones that define the paper boundary.
+    std::vector<point> corners(points.begin(), points.begin() + num_corners);
+
+    // Only the corners are checked for the counter-clockwise order; whatever
+    // order the remaining (interior) points arrive in is irrelevant.
+    if (!check_corners_ccw(corners))
+        return 1;
 
     char test_assignment[3] = {'0', 'M', 'V'};
     int num_edges = 0;
@@ -285,4 +308,95 @@ void find_angles(point &p, std::vector<edge> &e){
 
         p.local_angles.push_back(angle);
     }
+}
+
+// The base of the angles is always the lowest corner of the paper. When two
+// corners share the same height, the leftmost one wins.
+int find_base_corner(const std::vector<point> &corners){
+    int base = 0;
+
+    for (int i = 1; i < static_cast<int>(corners.size()); ++i) {
+        const double dy = corners[i].pos_y - corners[base].pos_y;
+        const double dx = corners[i].pos_x - corners[base].pos_x;
+
+        if (dy < -kCornerEps) {
+            base = i;                               // strictly lower corner
+        } else if (std::abs(dy) <= kCornerEps && dx < -kCornerEps) {
+            base = i;                               // same height, further left
+        }
+    }
+
+    return base;
+}
+
+// Checks the outline only (the `corners` vector), never `points`:
+//   1. corner 0 is the base (lowest, leftmost on a height tie);
+//   2. walking 1 -> 2 -> ... the angle measured from the base on the positive
+//      x axis only grows, i.e. the outline turns counter-clockwise;
+//   3. the signed area is positive (guards against a folded over outline that
+//      happens to have increasing angles).
+bool check_corners_ccw(const std::vector<point> &corners){
+    const int n = static_cast<int>(corners.size());
+
+    // The base corner must be the first one, since it is the origin of every
+    // angle used to describe the paper.
+    const int base = find_base_corner(corners);
+    if (base != 0) {
+        std::cerr << "Error: The corners are not organized counter-clockwise. "
+                  << "Corner 0 (" << corners[0].pos_x << ", " << corners[0].pos_y
+                  << ") must be the lowest one (leftmost on a height tie), but the base "
+                  << "corner is actually corner " << base << " ("
+                  << corners[base].pos_x << ", " << corners[base].pos_y << ").\n";
+        return false;
+    }
+
+    double previous_angle = -1.0;
+    for (int i = 1; i < n; ++i) {
+        double dx = corners[i].pos_x - corners[0].pos_x;
+        double dy = corners[i].pos_y - corners[0].pos_y;
+
+        if (std::abs(dy) <= kCornerEps)
+            dy = 0.0; // flush rounding noise on the base height
+
+        if (dx * dx + dy * dy <= kCornerEps * kCornerEps) {
+            std::cerr << "Error: The corners are not organized counter-clockwise: "
+                      << "corner " << i << " (" << corners[i].pos_x << ", "
+                      << corners[i].pos_y << ") is at the same position as corner 0 ("
+                      << corners[0].pos_x << ", " << corners[0].pos_y << ").\n";
+            return false;
+        }
+
+        // Every other corner is at or above the base, so this angle is in
+        // [0, pi]: a counter-clockwise walk around the base must strictly
+        // increase it.
+        const double angle = std::atan2(dy, dx);
+        if (angle <= previous_angle) {
+            std::cerr << "Error: The corners are not organized counter-clockwise "
+                      << "around the base corner 0 (" << corners[0].pos_x << ", "
+                      << corners[0].pos_y << "). Corner " << i << " ("
+                      << corners[i].pos_x << ", " << corners[i].pos_y
+                      << ")" << " does not continue the rotation: the corners must be "
+                      << "listed counter-clockwise, starting from the lowest one "
+                      << "(leftmost on a height tie).\n";
+            return false;
+        }
+        previous_angle = angle;
+    }
+
+    // Shoelace formula, twice the signed area: positive means counter-clockwise.
+    double twice_area = 0.0;
+    for (int i = 0; i < n; ++i) {
+        const point &a = corners[i];
+        const point &b = corners[(i + 1) % n];
+        twice_area += a.pos_x * b.pos_y - b.pos_x * a.pos_y;
+    }
+
+    if (twice_area <= 0.0) {
+        std::cerr << "Error: The corners are not organized counter-clockwise: the "
+                  << "outline they describe is clockwise or degenerate (signed area = "
+                  << twice_area / 2.0 << ").\n";
+        return false;
+    }
+
+    return true;
 }
