@@ -277,3 +277,27 @@ void origamiGraph::fix(){
         find_angles(p);
     }
 }
+
+// Rebuilds the incidence lists from scratch and re-derives the ordering/angles.
+// Points and edges are assumed to be consistent already (edge ids equal to their
+// index, endpoints inside points[]); stale ids are skipped instead of
+// dereferencing out of range.
+void origamiGraph::rebuild_incidence() {
+    for (point &p : points) {
+        p.local_edges.clear();
+        p.local_angles.clear();
+    }
+
+    const int num_points = static_cast<int>(points.size());
+    for (const edge &e : edges) {
+        const int u = e.p1.id;
+        const int v = e.p2.id;
+        if (u < 0 || v < 0 || u >= num_points || v >= num_points)
+            continue;
+
+        points[u].local_edges.push_back(e.id);
+        points[v].local_edges.push_back(e.id);
+    }
+
+    fix();
+}

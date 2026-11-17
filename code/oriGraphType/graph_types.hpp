@@ -40,6 +40,17 @@ inline constexpr double kBoundaryEpsFactor = 1e-9;
 // boundary point and cannot be mistaken for "outside the paper".
 inline constexpr double kBoundaryNudgeFraction = 0.1;
 
+// Tolerance of the collision detector (resolve_collisions in collisions.hpp).
+// It is RELATIVE to origamiGraph::paper_scale() and deliberately tiny: it only
+// covers the rounding noise of the double arithmetic used to intersect two
+// creases (and the decimal noise already present in the input coordinates), not
+// a geometric "fuzz". 1e-12 is ~4500 ulps, i.e. a few orders of magnitude above
+// the theoretical error of the intersection formula, yet far below any feature
+// of a real crease pattern, so two genuinely distinct creases are never merged
+// by accident. Distances are compared with this value; along an edge it turns
+// into the parameter tolerance eps / |edge|.
+inline constexpr double kCollisionEpsFactor = 1e-12;
+
 // One side of the paper outline, used only to detect where an extended edge
 // hits the paper. These are NOT creases and are never stored in
 // origamiGraph::edges.
@@ -141,6 +152,13 @@ public:
     // finds the angles between consecutive edges.
     void ccw_sort_point_edges(point &p);
     void find_angles(point &p);
+
+    // Rebuilds p.local_edges for every point from the current `edges` list and
+    // then runs fix(). Every graph producer (extend_edges, resolve_collisions)
+    // ends with it, so the invariant "local_edges holds the edges that touch the
+    // point, CCW sorted, and local_angles the gaps between them" is restored in
+    // a single place instead of being re-implemented per producer.
+    void rebuild_incidence();
 
     // Applies ccw_sort_point_edges() and find_angles() to every point.
     void fix();

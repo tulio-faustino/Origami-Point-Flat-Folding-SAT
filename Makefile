@@ -45,6 +45,7 @@ BINDIR := bin
 
 # Sources: the console entry point plus everything it links against.
 LIBSRCS := $(CODE_DIR)/oriGraphType/graph_types.cpp \
+           $(CODE_DIR)/oriGraphType/collisions.cpp \
            $(CODE_DIR)/solver/src/mv_solver.cpp \
            $(CODE_DIR)/plot_generator/src/printing_functions.cpp
 

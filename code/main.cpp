@@ -9,6 +9,7 @@
 #include <utility>    // std::move
 #include <vector>
 
+#include "collisions.hpp"
 #include "graph_types.hpp"
 #include "mv_solver.hpp"
 #include "printing_functions.hpp"
@@ -24,7 +25,8 @@
 //   mv_solve <name>            solve the MV assignment, keep it in
 //                              graph.sort_assignment (no file is written)
 //   extend <src> [dst]         extend every edge of <src> to the paper border
-//   intersections <src> [dst]  (stub) split the intersecting edges of <src>
+//   intersections <src> [dst]  split the colliding creases of <src> into a
+//                              planar graph (see collisions.hpp)
 //   print <type> [grafo] [file] write + render the instructions of a graph
 //   graphs | list              list the graphs loaded so far
 //   clear                      clear the terminal screen
@@ -141,8 +143,9 @@ int run_solve(origamiGraph& graph);
 // it hits the outline. The hit becomes a new boundary point (snapped to an
 // existing point when within tolerance) and a stub edge with the base (dummy)
 // type kBaseEdgeType is added. Collisions with the other creases are NOT handled
-// here (that is what intersections() will be for).
-void make_intersections(const origamiGraph& original, origamiGraph& new_graph);
+// here: that is make_intersections()'s job, and extending can create new
+// crossings, so the recommended order is intersections -> extend -> intersections.
+bool make_intersections(const origamiGraph& original, origamiGraph& new_graph);
 void extend_edges(const origamiGraph& original, origamiGraph& new_graph);
 
 // --- printing --------------------------------------------------------------
@@ -336,7 +339,8 @@ void print_commands() {
         << "  create <name> <n_corners>  create an empty graph with n_corners corners\n"
         << "  mv_solve <name>            solve the MV assignment (kept in graph.sort_assignment)\n"
         << "  extend <src> [dst]         extend every edge of <src> to the paper border\n"
-        << "  intersections <src> [dst]  (not implemented) split the intersecting edges of <src>\n"
+        << "  intersections <src> [dst]  split the creases of <src> that collide (crossings,\n"
+        << "                             T-junctions) into a planar graph\n"
         << "  print <type> [graph] [file]  write + render the instructions (print --help)\n"
         << "  graphs | list              list the graphs loaded so far\n"
         << "  clear                      clear the terminal screen\n"
@@ -442,15 +446,13 @@ void command_extend(const std::vector<std::string>& tokens, bool intersections) 
     }
 
     origamiGraph generated;
-    if (intersections)
-        make_intersections(source->graph, generated);
-    else
-        extend_edges(source->graph, generated);
-
     if (intersections) {
-        std::cout << "note: '" << command << "' is not implemented yet; graph '"
-                  << destination << "' was not created.\n";
-        return;
+        // The resolver reports its own diagnostics and rejects patterns it
+        // cannot represent (collinear overlap), in which case no graph exists.
+        if (!make_intersections(source->graph, generated))
+            return;
+    } else {
+        extend_edges(source->graph, generated);
     }
 
     if (generated.points.empty()) {
@@ -938,9 +940,60 @@ void add_stub(origamiGraph& graph, int from, int to) {
 
 } // namespace
 
-void make_intersections(const origamiGraph& original, origamiGraph& new_graph) {
-    (void)original;
-    (void)new_graph;
+bool make_intersections(const origamiGraph& original, origamiGraph& new_graph) {
+    collision_report report;
+
+    if (!resolve_collisions(original, new_graph, report)) {
+        if (report.error.empty())
+            std::cerr << "Error: the pattern was rejected.\n";
+        else
+            std::cerr << "Error: the pattern was rejected: " << report.error << "\n";
+        for (const std::string& overlap : report.overlaps)
+            std::cerr << "  collinear overlap: " << overlap << "\n";
+        std::cerr << "Two creases lying on top of each other have no unambiguous "
+                     "interpretation, so no graph was created.\n";
+        return false;
+    }
+
+    std::cout << "Collision scan (tolerance " << collision_eps(original) << "): ";
+    if (new_graph.points.empty()) {
+        std::cout << "the source pattern has no points, nothing to do.\n";
+        return true;
+    }
+    std::cout << report.crossings << " crossing(s)";
+    if (report.snapped_crossings > 0)
+        std::cout << " (" << report.snapped_crossings << " snapped onto an existing point)";
+    std::cout << ", " << report.t_junctions << " T-junction(s), " << report.new_points
+              << " new point(s), " << report.split_edges << " edge(s) split.\n";
+
+    if (report.merged_points > 0)
+        std::cout << "  normalised: " << report.merged_points
+                  << " coincident point(s) merged";
+    if (report.dropped_edges > 0)
+        std::cout << ", " << report.dropped_edges << " degenerate/duplicate edge(s) dropped";
+    if (report.merged_points > 0 || report.dropped_edges > 0)
+        std::cout << "\n";
+
+    if (report.ambiguous_snaps > 0)
+        std::cerr << "warning: " << report.ambiguous_snaps
+                  << " coordinate(s) had more than one point within the tolerance; the "
+                     "nearest one was used.\n";
+
+    if (report.dropped_splits > 0)
+        std::cerr << "warning: " << report.dropped_splits
+                  << " split(s) were closer than the tolerance to the previous one and were "
+                     "absorbed.\n";
+
+    if (report.isolated_points > 0)
+        std::cerr << "warning: " << report.isolated_points
+                  << " point(s) ended up with no edge.\n";
+
+    if (report.odd_interior_points > 0)
+        std::cerr << "warning: " << report.odd_interior_points
+                  << " interior vertex(es) have an odd number of creases (a crease ends "
+                     "inside the paper); Maekawa/Kawasaki skip them.\n";
+
+    return true;
 }
 
 void extend_edges(const origamiGraph& original, origamiGraph& new_graph) {
@@ -1059,16 +1112,7 @@ void extend_edges(const origamiGraph& original, origamiGraph& new_graph) {
     }
 
     // 4. Rebuild the incidence lists and the CCW ordering/angles of the result.
-    for (point& p : new_graph.points) {
-        p.local_edges.clear();
-        p.local_angles.clear();
-    }
-    for (const edge& e : new_graph.edges) {
-        new_graph.points[e.p1.id].local_edges.push_back(e.id);
-        new_graph.points[e.p2.id].local_edges.push_back(e.id);
-    }
-
-    new_graph.fix();
+    new_graph.rebuild_incidence();
 }
 
 // ---------------------------------------------------------------------------

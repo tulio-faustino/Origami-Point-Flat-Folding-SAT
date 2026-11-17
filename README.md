@@ -171,21 +171,75 @@ num_corners" is no longer enough once there are new points on the border. The so
 the Maekawa-Justin count: an even-degree boundary vertex is skipped (its paper angle is not in the
 graph), while odd-degree vertices keep the $|M|-|V| = 1$ boundary rule.
 
-### 7. Still open: collisions and overlapping creases
+### 7. Collisions: crossing creases and T-junctions
 
-The graph format assumes that every crease starts and ends at a point that is given in the input,
-and that is not general enough yet. Two cases are still unsolved and I am thinking about how to
-handle them before going further:
+The graph format assumes that every crease starts and ends at a point that is given in the input.
+That is not general enough: two creases that cross in their interiors create a vertex (and four
+new angles) that does not exist in the input, and a crease that ends in the middle of another one
+does the same with three angles. Such a place has to become a vertex, otherwise the foldability
+rules are applied to the wrong set of angles. The command
 
-* **Collisions** — two edges that cross in their interior create a new point (and four new angles)
-  that does not exist in the input graph. Such an intersection has to become a vertex, otherwise
-  the foldability rules are applied to the wrong set of angles.
-* **Overlapping lines** — two creases that lie on top of each other (fully or partially) with no
-  point at the overlap. It is not clear yet whether they should be merged into a single crease,
-  split at the endpoints of the overlap, or rejected as an invalid pattern.
+```
+intersections <src> [dst]
+```
 
-Both cases change the graph itself, so they have to be resolved *before* the angles are computed
-and before the SAT instance is built.
+copies `<src>` into a new graph `<dst>` (default `<src>_intersections`) with every collision
+resolved: the crossing becomes a vertex, both creases are split there, and the incidence lists and
+the local angles are recomputed. The result is a new graph, so `<src>` is never modified.
+
+Three collision classes are handled:
+
+* **Proper crossing** — the two creases cross in their interiors. A vertex is created and the two
+  edges become four.
+* **T-junction** — an existing point lies on the interior of another edge (within the tolerance).
+  The edge is split at that point; no new vertex is created.
+* **Collinear overlap** — two creases lie on top of each other, fully or partially. The pattern is
+  **rejected**: merging the overlap into one crease would silently delete input, and keeping both
+  would put two coincident creases in the same counter-clockwise fan and break
+  Maekawa/Kawasaki. The command reports the offending edges and creates no graph.
+
+The comparison is done with a tolerance that only covers floating point arithmetic — including the
+decimal rounding already present in the input coordinates — and never a "geometric fuzz": it is
+`1e-12 × paper_scale()` (about `1.4e-10` for a 100×100 sheet), and along an edge it becomes
+`eps / |edge|`. Everything closer than that is the same point, everything farther apart is a real
+feature. Concretely:
+
+* every candidate coordinate goes through a point index, so a crossing that lands on an existing
+  vertex reuses it instead of creating a near-duplicate one;
+* two input points closer than the tolerance are merged while the graph is copied;
+* an intersection whose position is ill-conditioned (`|cross| · |edge| <= eps`, i.e. nearly
+  parallel lines, where the computed point moves by more than the tolerance) is not invented as a
+  crossing and is left to the collinear/T-junction rules;
+* segments shorter than the tolerance, duplicate edges and self loops are dropped.
+
+The scan uses an AABB tree as broad phase, so only segments whose boxes overlap are compared; the
+cost is `O(E log E + V log E + C₁ + C₂ + K log K)` (candidate pairs `C`, split events `K`) and
+falls back to the plain `O(E²)` brute force for degenerately clustered input. Running the command
+on its own output reports zero collisions, and the crease pattern read by `graph.in` really does
+cross itself: four proper crossings at `(35,35)`, `(65,35)`, `(35,65)` and `(65,65)` turn its 9
+points / 12 edges into 13 points / 20 edges.
+
+Because extending a crease to the border can create new crossings, the recommended order is
+
+```
+insert g pattern.in
+intersections g g_planar
+extend g_planar g_full
+intersections g_full g_ready
+mv_solve g_ready
+```
+
+and the command prints what it did:
+
+```
+Collision scan (tolerance 1.41421e-10): 4 crossing(s), 0 T-junction(s), 4 new point(s), 8 edge(s) split.
+Graph 'g_intersections': 13 points (4 on the paper boundary), 20 edges.
+```
+
+Interior vertices left with an odd number of creases (which is what a T-junction produces when the
+crease really does end inside the paper) are reported as a warning: Maekawa/Kawasaki already skip
+them, so the solver keeps working, but the pattern itself is suspicious. An MV assignment is not
+carried over: splitting changes the number of edges, so `mv_solve` has to run again.
 
 ## Motivation & Challenges
 
